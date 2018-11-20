@@ -1,2 +1,2 @@
 # white-city
-Network layer for MPC (Secure Multi-Party Computation) protocols 
+Network layer for sMPC (Secure Multi-Party Computation) protocols 
