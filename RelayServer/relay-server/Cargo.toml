@@ -1,0 +1,19 @@
+[package]
+name = "relay-server"
+version = "0.1.0"
+authors = ["Avi <kozokinavi@gmail.com>"]
+
+[dependencies]
+libp2p = { git = "https://github.com/libp2p/rust-libp2p" }
+env_logger = "0.6.0"
+futures = "0.1.25"
+tokio = "0.1.13"
+tokio-stdin-stdout = "0.1.5"
+tokio-core = "0.1.17"
+
+arrayvec = "0.4.8"
+bytes = "0.4.11"
+tokio-tcp = "0.1.2"
+log = "0.4.6"
+rand = "0.6.1"
+
