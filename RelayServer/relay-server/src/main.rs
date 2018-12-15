@@ -1,127 +1,186 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
+//! Relay Server implementation
+//! You can test this out by running:
+//!     cargo run
+//! And then in another window run:
+//!
+//!     cargo run --example connect 127.0.0.1:8080
+//!
 
-//! A basic chat application demonstrating libp2p and the Floodsub protocol.
-//!
-//! Using two terminal windows, start two instances. Take note of the listening
-//! address of the first instance and start the second with this address as the
-//! first argument. In the first terminal window, run:
-//! ```text
-//! cargo run --example chat
-//! ```
-//! It will print the PeerId and the listening address, e.g. `Listening on
-//! "/ip4/0.0.0.0/tcp/24915"`
-//!
-//! In the second terminal window, start a new instance of the example with:
-//! ```text
-//! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
-//! ```
-//! The two nodes connect. Type a message in either terminal and hit return: the
-//! message is sent and printed in the other terminal. Close with Ctrl-c.
-//!
-//! You can of course open more terminal windows and add more participants.
-//! Dialing any of the other peers will propagate the new participant to all
-//! chat members and everyone will receive all messages.
-
-extern crate env_logger;
 extern crate futures;
-extern crate libp2p;
-extern crate tokio;
+extern crate tokio_core;
+extern crate tokio_io;
 
-use futures::prelude::*;
-use libp2p::{
-    Transport,
-    core::upgrade::{self, OutboundUpgradeExt},
-    secio,
-    mplex,
-    tokio_codec::{FramedRead, LinesCodec}
-};
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::iter;
+use std::env;
+use std::io::{Error, ErrorKind, BufReader};
 
-fn main() {
-    env_logger::init();
+use futures::Future;
+use futures::stream::{self, Stream};
+use tokio_core::net::TcpListener;
+use tokio_core::reactor::Core;
+use tokio_io::io;
+use tokio_io::AsyncRead;
 
-    // Create a random PeerId
-    let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_pub_key = local_key.to_public_key();
-    println!("Local peer id: {:?}", local_pub_key.clone().into_peer_id());
+struct Peer {
+    tx: futures::sync::mpsc::UnboundedSender<String>,
+    id: usize,
+}
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-    let transport = libp2p::CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(local_key))
-        .and_then(move |out, _| {
-            let peer_id = out.remote_key.into_peer_id();
-            let upgrade = mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer) );
-            upgrade::apply_outbound(out.stream, upgrade).map_err(|e| e.into_io_error())
-        });
+struct ProtocolSession {
+    n: usize,
+    connections: usize,
+    activePeers: usize,
+    round: usize,
+}
 
-    // Create a Floodsub topic
-    let floodsub_topic = libp2p::floodsub::TopicBuilder::new("chat").build();
-
-    // Create a Swarm to manage peers and events
-    let mut swarm = {
-        let mut behaviour = libp2p::floodsub::Floodsub::new(local_pub_key.clone().into_peer_id());
-        behaviour.subscribe(floodsub_topic.clone());
-        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(), local_pub_key)
-    };
-
-    // Listen on all interfaces and whatever port the OS assigns
-    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
-    println!("Listening on {:?}", addr);
-
-    // Reach out to another node
-    if let Some(to_dial) = std::env::args().nth(1) {
-        let dialing = to_dial.clone();
-        match to_dial.parse() {
-            Ok(to_dial) => {
-                match libp2p::Swarm::dial_addr(&mut swarm, to_dial) {
-                    Ok(_) => println!("Dialed {:?}", dialing),
-                    Err(e) => println!("Dial {:?} failed: {:?}", dialing, e)
-                }
-            },
-            Err(err) => println!("Failed to parse address to dial: {:?}", err),
+impl ProtocolSession{
+    pub fn new() -> ProtocolSession {
+        ProtocolSession{
+            n: 2,
+            connections: 0,
+            activePeers: 0,
+            round: 0
         }
     }
 
-    // Read full lines from stdin
-    let stdin = tokio_stdin_stdout::stdin(0);
-    let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
-
-    // Kick it off - we still need to use tokios functions directly
-    tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
-        loop {
-            match framed_stdin.poll().expect("Error while polling stdin") {
-                Async::Ready(Some(line)) => swarm.publish(&floodsub_topic, line.as_bytes()),
-                Async::Ready(None) => panic!("Stdin closed"),
-                Async::NotReady => break,
-            };
+    pub fn new_connection(&mut self) -> bool {
+        if self.connections < self.n {
+            self.connections += 1;
+            return true;
         }
+        false
+    }
 
-        loop {
-            match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(message)) => {
-                    println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
-                },
-                Async::Ready(None) | Async::NotReady => break,
-            }
-        }
+    pub fn increase_round(&mut self) -> bool {
+        self.round = (self.round + 1) % self.n;
+        true
+    }
 
-        Ok(Async::NotReady)
-    }));
+}
+fn main() {
+    let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
+    let addr = addr.parse().unwrap();
+
+    // Create the event loop and TCP listener we'll accept connections on.
+    let mut core = Core::new().unwrap();
+    let handle = core.handle();
+
+    let socket = TcpListener::bind(&addr, &handle).unwrap();
+    println!("Listening on: {}", addr);
+
+    // This is a single-threaded server, so we can just use Rc and RefCell to
+    // store the map of all connections we know about.
+    let connections = Rc::new(RefCell::new(HashMap::new()));
+    let session = Rc::new(RefCell::new(ProtocolSession::new()));
+
+    let srv = socket.incoming().for_each(move |(stream, addr)| {
+        println!("New Connection: {}", addr);
+        session.borrow_mut().new_connection();
+        let session_inner = session.clone();
+        let (reader, writer) = stream.split();
+
+        // Create a channel for our stream, which other sockets will use to
+        // send us messages. Then register our address with the stream to send
+        // data to us.
+        let (tx, rx) = futures::sync::mpsc::unbounded();
+
+        let peer_number= connections.borrow_mut().keys().len() + 1;
+        connections.borrow_mut().insert(addr, Peer {tx, id:peer_number});
+        println!("peer number: {}", peer_number);
+
+        // Define here what we do for the actual I/O. That is, read a bunch of
+        // lines from the socket and dispatch them while we also write any lines
+        // from other sockets.
+        let connections_inner = connections.clone();
+        let reader = BufReader::new(reader);
+
+        // Model the read portion of this socket by mapping an infinite
+        // iterator to each line off the socket. This "loop" is then
+        // terminated with an error once we hit EOF on the socket.
+        let iter = stream::iter_ok::<_, Error>(iter::repeat(()));
+        let socket_reader = iter.fold(reader, move |reader, _| {
+            // Read a line off the socket, failing if we're at EOF
+            let line = io::read_until(reader, b'\n', Vec::new());
+            let line = line.and_then(|(reader, vec)| {
+                if vec.len() == 0 {
+                    Err(Error::new(ErrorKind::BrokenPipe, "broken pipe"))
+                } else {
+                    Ok((reader, vec))
+                }
+            });
+
+            // Convert the bytes we read into a string, and then send that
+            // string to all other connected clients.
+            let line = line.map(|(reader, vec)| {
+                (reader, String::from_utf8(vec))
+            });
+            let connections = connections_inner.clone();
+            let session = session_inner.clone();
+            line.map(move |(reader, message)| {
+                println!("{}: {:?}", addr, message);
+
+
+                let mut conns = connections.borrow_mut();
+
+                let mut protocol_session = session.borrow_mut();
+                if let Ok(msg) = message {
+                    // Check that it is the senders turn
+
+                    let id = conns.get_mut(&addr).unwrap().id;
+
+                    if id == protocol_session.round + 1 {
+                        protocol_session.increase_round();
+                    }
+                    else {
+                        println!("this is not this senders turn!");
+                        return reader;
+                    }
+
+                    // For each open connection except the sender, send the
+                    // string via the channel.
+                    let iter = conns.iter_mut()
+                        .filter(|&(&k, _)| k != addr)
+                        .map(|(_, v)| v);
+                    for peer in iter {
+                        println!("sending to peer {}", peer.id);
+
+                        peer.tx.unbounded_send(format!("{}: {}", addr, msg)).unwrap();
+                    }
+                } else {
+                    let peer = conns.get_mut(&addr).unwrap();
+                    peer.tx.unbounded_send("You didn't send valid UTF-8.".to_string()).unwrap();
+                }
+                reader
+            })
+        });
+
+        // Whenever we receive a string on the Receiver, we write it to
+        // `WriteHalf<TcpStream>`.
+        let socket_writer = rx.fold(writer, |writer, msg| {
+            println!("{:?}",writer);
+            let amt = io::write_all(writer, msg.into_bytes());
+            let amt = amt.map(|(writer, _)| writer);
+            amt.map_err(|_| ())
+        });
+
+        // Now that we've got futures representing each half of the socket, we
+        // use the `select` combinator to wait for either half to be done to
+        // tear down the other. Then we spawn off the result.
+        let connections = connections.clone();
+        let socket_reader = socket_reader.map_err(|_| ());
+        let connection = socket_reader.map(|_| ()).select(socket_writer.map(|_| ()));
+        handle.spawn(connection.then(move |_| {
+            connections.borrow_mut().remove(&addr);
+            println!("Connection {} closed.", addr);
+            Ok(())
+        }));
+
+        Ok(())
+    });
+
+    // execute server
+    core.run(srv).unwrap();
 }
