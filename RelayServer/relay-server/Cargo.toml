@@ -24,3 +24,8 @@ tokio-tcp = "0.1.2"
 log = "0.4.6"
 rand = "0.6.1"
 
+serde = "1.0.82"
+serde_derive = "1.0.82"
+serde_json = "1.0.33"
+byteorder = "1.2.7"
+
