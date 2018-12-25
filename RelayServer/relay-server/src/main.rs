@@ -37,9 +37,9 @@ struct ProtocolSession {
 }
 
 impl ProtocolSession{
-    pub fn new() -> ProtocolSession {
+    pub fn new(_n: usize) -> ProtocolSession {
         ProtocolSession{
-            n: 2,
+            n: _n,
             connections: 0,
             activePeers: 0,
             round: 0
@@ -61,6 +61,8 @@ impl ProtocolSession{
 
 }
 fn main() {
+    let PARTICIPANTS_NUMBER = 2; // this is a placeholder for now. Will be changed to input from first connection
+
     let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
     let addr = addr.parse().unwrap();
 
@@ -74,9 +76,10 @@ fn main() {
     // This is a single-threaded server, so we can just use Rc and RefCell to
     // store the map of all connections we know about.
     let connections = Rc::new(RefCell::new(HashMap::new()));
-    let session = Rc::new(RefCell::new(ProtocolSession::new()));
+    let session = Rc::new(RefCell::new(ProtocolSession::new(PARTICIPANTS_NUMBER)));
 
     let srv = socket.incoming().for_each(move |(stream, addr)| {
+
         println!("New Connection: {}", addr);
         session.borrow_mut().new_connection();
         let session_inner = session.clone();
