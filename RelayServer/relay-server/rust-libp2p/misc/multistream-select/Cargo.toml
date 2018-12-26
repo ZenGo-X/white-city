@@ -1,0 +1,23 @@
+[package]
+name = "multistream-select"
+description = "Multistream-select negotiation protocol for libp2p"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+edition = "2018"
+
+[dependencies]
+bytes = "0.4"
+futures = { version = "0.1" }
+log = "0.4"
+smallvec = "0.6"
+tokio-codec = "0.1"
+tokio-io = "0.1"
+unsigned-varint = { version = "0.2.1", features = ["codec"] }
+
+[dev-dependencies]
+tokio = "0.1"
+tokio-tcp = "0.1"
