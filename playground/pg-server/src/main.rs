@@ -2,22 +2,28 @@ extern crate tokio;
 #[macro_use]
 extern crate serde_json;
 extern crate tokio_serde_json;
+extern crate futures;
 
+use std::str;
 use std::collections::HashMap;
 use std::io::BufReader;
 use std::env;
+use std::iter;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use tokio::io::{lines, write_all};
-use tokio::net::TcpListener;
+use tokio::io::lines;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 use tokio::codec::{FramedRead, LengthDelimitedCodec, FramedWrite};
 
 use serde_json::value::Value;
 use tokio_serde_json::{ReadJson, WriteJson};
 use std::fmt;
-
+use tokio::io;
+//use future::Future;
+use futures::stream::{self, Stream};
+use std::io::{Error, ErrorKind};
 
 #[derive(Hash)]
 #[derive(PartialEq, Eq, Clone)]
@@ -43,12 +49,12 @@ impl fmt::Display for TupleKey {
 ///
 /// This database will be shared via `Arc`, so to mutate the internal map we're
 /// going to use a `Mutex` for interior mutability.
-struct Database {
+struct _Database {
     map: Mutex<HashMap<TupleKey, String>>,
 }
 
 /// Possible requests our clients can send us
-enum Request {
+enum _Request {
     Get { key: TupleKey },
     Set { key: TupleKey, value: String },
     Error { },
@@ -56,18 +62,35 @@ enum Request {
 }
 
 /// Responses to the `Request` commands above
-enum Response {
+enum _Response {
     Value { key: TupleKey, value: String },
     Set { key: TupleKey, value: String, previous: Option<String> },
     Error { msg: String },
 }
 
-fn main()  {
+struct Database {
+    map: Mutex<HashMap<String, String>>,
+}
+
+/// Possible requests our clients can send us
+enum Request {
+    Get { key: String },
+    Set { key: String, value: String },
+}
+
+/// Responses to the `Request` commands above
+enum Response {
+    Value { key: String, value: String },
+    Set { key: String, value: String, previous: Option<String> },
+    Error { msg: String },
+}
+
+fn main() -> Result<(), Box<std::error::Error>> {
     // Parse the address we're going to run this server on
     // and set up our TCP listener to accept connections.
-    let addr = env::args().nth(1).unwrap_or("127.0.0.1:17653".to_string());
-    let addr = addr.parse::<SocketAddr>().unwrap();
-    let listener = TcpListener::bind(&addr).unwrap();
+    let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
+    let addr = addr.parse::<SocketAddr>()?;
+    let listener = TcpListener::bind(&addr).map_err(|_| "failed to bind")?;
     println!("Listening on: {}", addr);
 
     // Create the shared state of this server that will be shared amongst all
@@ -76,133 +99,50 @@ fn main()  {
     // each independently spawned client will have a reference to the in-memory
     // database.
     let mut initial_db = HashMap::new();
-    //initial_db.insert("foo".to_string(), "bar".to_string());
+    initial_db.insert("foo".to_string(), "bar".to_string());
     let db = Arc::new(Database {
         map: Mutex::new(initial_db),
     });
 
-    tokio::run(
-        listener
-            .incoming()
-            .map_err(|e| println!("error accepting socket; error = {:?}", e))
-            .for_each( |socket| {
-                let (reader, writer) = socket.split();
-
-                // Delimit frames using a length header
-                let length_delimited = FramedRead::new(reader, LengthDelimitedCodec::new());
-
-                // Deserialize frames
-                let deserialized = ReadJson::<_, Value>::new(length_delimited)
-                    .map_err(|e| println!("ERR: {:?}", e));
-
-                let length_delimited_write = FramedWrite::new(writer, LengthDelimitedCodec::new());
-                let serialized = WriteJson::new(length_delimited_write);
-                // Spawn a task that prints all received messages to STDOUT
-                tokio::spawn( deserialized.for_each(|msg| {
-                    serialized.send(msg).map(|_| ());
-                  //  println!("GOT: {:?}", msg);
-                    Ok(())
-                }));
-
-                Ok(())
-            }).map_err(|_| ()),
-    );
-
-    /*
-    tokio::run(
-        listener
-            .incoming()
-            .for_each(|socket| {
-                let (reader, writer) = socket.split();
-                // Delimit frames using a length header
-                let length_delimited_read = FramedRead::new(reader, LengthDelimitedCodec::new());
-                let length_delimited_write = FramedWrite::new(writer, LengthDelimitedCodec::new());
-
-                // Deserialize frames
-                let deserialized = ReadJson::<_, Value>::new(length_delimited_read)
-                    .map_err(|e| println!("ERR: {:?}", e));
-                let serialized = WriteJson::new(length_delimited_write);
-                // Spawn a task that prints all received messages to STDOUT
-                tokio::spawn(deserialized.for_each(|msg| {
-                    serialized.send(msg).map(|_| ())
-                }));
-
-                Ok(())
-            }).map_err(|_| ()),
-    );
-
-    */
-
-    /*
-    tokio::run(
-        socket
-            .and_then(|socket| {
-                // Delimit frames using a length header
-                let length_delimited = FramedWrite::new(socket, LengthDelimitedCodec::new());
-
-                // Serialize frames with JSON
-                let serialized = WriteJson::new(length_delimited);
-
-                // Send the value
-                serialized
-                    .send(json!({
-                        "name": "John Doe",
-                        "age": 43,
-                        "phones": [
-                            "+44 1234567",
-                            "+44 2345678"
-                        ]
-                    })).map(|_| ())
-            }).map_err(|_| ()),
-    );
-    tokio::run( listener.incoming()
+    let done = listener.incoming()
         .map_err(|e| println!("error accepting socket; error = {:?}", e))
         .for_each(move |socket| {
             // As with many other small examples, the first thing we'll do is
             // *split* this TCP stream into two separately owned halves. This'll
             // allow us to work with the read and write halves independently.
-         //   let (reader, writer) = socket.split();
+            let (reader, writer) = socket.split();
 
-            // Since our protocol is line-based we use `tokio_io`'s `lines` utility
-            // to convert our stream of bytes, `reader`, into a `Stream` of lines.
+                        let lines2 = lines(BufReader::new(reader))
+                            .map( |line| {
+                                format!("{} is {}", line.clone(), line.clone())
 
-            let length_delimited = FramedRead::new(socket, LengthDelimitedCodec::new());
-
-            let deserialized = ReadJson::<_, Value>::new(length_delimited).map_err(|e| println!("ERR: {:?}", e));
-
-            tokio::spawn(deserialized.for_each(|val| {
-                let request = match Request::parse(&val) {
-                    Ok(req) => req,
-                    Err(e) => Request::Error { },
-                };
-                let mut db = db.map.lock().unwrap();
-
-                let server_response =  match request {
-                    Request::Get { key } => {
-                        match db.get(&key) {
-                            Some(value) => Response::Value { key, value: value.clone() },
-                            None => Response::Error { msg: format!("no key {:?}", key.first) },
-                        }
-                    }
-                    Request::Set { key, value } => {
-                        let previous = db.insert(key.clone(), value.clone());
-                        Response::Set { key, value, previous }
-                    }
-                };
-                let length_delimited_write = FramedWrite::new(socket, LengthDelimitedCodec::new());
-                let serialized = WriteJson::new(length_delimited_write);
-                 serialized.send(server_response.serialize()).map(|_| ()).map(|_| ());
-
-                Ok(())
-            }));
+                           });
 
 
-        }).map_err(|_| ()),
-    );
+                        let writes
+                        = lines2.fold(writer, |writer, mut response| {
+                            response.push('\n');
+                            io::write_all(writer, response.into_bytes()).map(|(w, _)| w)
+                        });
+
+
+
+            let msg
+            = writes.then(move |_| Ok(()));
+
+            tokio::spawn(msg)
+
+        });
+
+
+
+
+    tokio::run(done);
     Ok(())
-    */
 }
 
+
+/*
 impl Request {
 
     fn parse(input: &Value) -> Result<Request, String> {
@@ -255,3 +195,4 @@ impl Response {
     }
 }
 
+*/
