@@ -15,6 +15,7 @@ use std::str;
 use std::collections::HashMap;
 use rocket::State;
 use rocket_contrib::json::Json;
+use std::sync::Mutex;
 
 #[derive(Hash)]
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
@@ -36,7 +37,7 @@ impl fmt::Display for TupleKey {
     }
 }
 pub struct Database {
-   pub map: HashMap<TupleKey, String>,
+   pub map: Mutex<HashMap<TupleKey, String>>,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -51,11 +52,12 @@ pub struct Entry{
 }
 #[post("/get", format = "json", data = "<request>")]
 fn get(
-    state: State<Database>,
+    db_mtx: State<Mutex<HashMap<TupleKey,String>>>,
     request: Json<Index>
 ) -> Json<Result<Entry,()>> {
     let index: Index = request.0;
-    match state.map.get(&index.key){
+    let mut hm = db_mtx.lock().unwrap();
+    match hm.get(&index.key){
         Some(v) => {
             let entry = Entry{
                 key: index.key,
@@ -70,11 +72,12 @@ fn get(
 
 #[post("/set", format = "json", data = "<request>")]
 fn set(
-    mut state: State<HashMap<TupleKey, String>>,
+    db_mtx: State<Mutex<HashMap<TupleKey,String>>>,
     request: Json<Entry>
 ) -> Json<Result<(),()>> {
     let entry: Entry = request.0;
-    state.insert(entry.key.clone(), entry.value.clone());
+    let mut hm = db_mtx.lock().unwrap();
+    hm.insert(entry.key.clone(), entry.value.clone());
     Json(Ok(()))
 }
 //refcell, arc
@@ -82,18 +85,19 @@ fn set(
 fn main() {
     let key1 = TupleKey::new("1".to_string(), "2".to_string());
    // let mut db = Database{ map: HashMap::new()};
-    let mut db = HashMap::new();
-    db.insert(key1, "test".to_string());
+    let db : HashMap<TupleKey, String> = HashMap::new();
+    let db_mtx = Mutex::new(db);
+  //  db.insert(key1, "test".to_string());
 
 
 
-    rocket::ignite().mount("/", routes![get, set]).manage(db).launch();
+    rocket::ignite().mount("/", routes![get, set]).manage(db_mtx).launch();
 }
 
 
 pub mod tests {
     use reqwest;
-    use super::{TupleKey, Entry};
+    use super::{TupleKey, Entry, Index};
     use serde_json;
 
     #[test]
@@ -105,16 +109,17 @@ pub mod tests {
             second: "shlomovits".to_string(),
         };
         let entry = Entry{
-            key,
+            key: key.clone(),
             value: "secret".to_string(),
         };
         let res_body = postb(&client, "set", entry).unwrap();
-        let answer1 = serde_json::from_str(&res_body).unwrap();
+        let answer1 : Result<(),()> = serde_json::from_str(&res_body).unwrap();
         println!("answer1: {:?}", answer1);
 
 
-        let res_body = getb(&client, "get", key).unwrap();
-        let answer2 = serde_json::from_str(&res_body).unwrap();
+        let index = Index{key};
+        let res_body = postb(&client, "get", index).unwrap();
+        let answer2 : Result<Entry,()> = serde_json::from_str(&res_body).unwrap();
         println!("answer2: {:?}", answer2);
     }
 
@@ -127,22 +132,9 @@ pub mod tests {
             .post(&format!("http://127.0.0.1:8000/{}", path))
             .json(&body)
             .send();
-
         Some(res.unwrap().text().unwrap())
     }
 
-    pub fn getb<T>(client: &reqwest::Client, path: &str, body: T) -> Option<String>
-        where
-            T: serde::ser::Serialize,
-    {
-        let res = client
-            .get(&format!("http://127.0.0.1:8000/{}", path))
-            .json(&body)
-            .send();
-
-
-        Some(res.unwrap().text().unwrap())
-    }
 
 }
 
