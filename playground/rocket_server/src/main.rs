@@ -16,6 +16,8 @@ use std::collections::HashMap;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::sync::Mutex;
+use std::sync::RwLock;
+use rocket::config::{Config, Environment};
 
 #[derive(Hash)]
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
@@ -36,9 +38,6 @@ impl fmt::Display for TupleKey {
         write!(f, "({}, {})", self.first, self.second)
     }
 }
-pub struct Database {
-   pub map: Mutex<HashMap<TupleKey, String>>,
-}
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Index{
@@ -52,16 +51,16 @@ pub struct Entry{
 }
 #[post("/get", format = "json", data = "<request>")]
 fn get(
-    db_mtx: State<Mutex<HashMap<TupleKey,String>>>,
+    db_mtx: State<RwLock<HashMap<TupleKey,String>>>,
     request: Json<Index>
 ) -> Json<Result<Entry,()>> {
     let index: Index = request.0;
-    let mut hm = db_mtx.lock().unwrap();
+    let mut hm = db_mtx.read().unwrap();
     match hm.get(&index.key){
         Some(v) => {
             let entry = Entry{
                 key: index.key,
-                value: format!("{} {}", v.clone(), "please".to_string()),
+                value: format!("{}", v.clone()),
             };
             Json(Ok(entry))
         },
@@ -72,26 +71,26 @@ fn get(
 
 #[post("/set", format = "json", data = "<request>")]
 fn set(
-    db_mtx: State<Mutex<HashMap<TupleKey,String>>>,
+    db_mtx: State<RwLock<HashMap<TupleKey,String>>>,
     request: Json<Entry>
 ) -> Json<Result<(),()>> {
     let entry: Entry = request.0;
-    let mut hm = db_mtx.lock().unwrap();
+    let mut hm = db_mtx.write().unwrap();
     hm.insert(entry.key.clone(), entry.value.clone());
     Json(Ok(()))
 }
 //refcell, arc
 
 fn main() {
-    let key1 = TupleKey::new("1".to_string(), "2".to_string());
-   // let mut db = Database{ map: HashMap::new()};
+
+
+    let mut my_config = Config::development();
+    my_config.set_port(18001);
     let db : HashMap<TupleKey, String> = HashMap::new();
-    let db_mtx = Mutex::new(db);
-  //  db.insert(key1, "test".to_string());
-
-
-
+    let db_mtx = RwLock::new(db);
+    //rocket::custom(my_config).mount("/", routes![get, set]).manage(db_mtx).launch();
     rocket::ignite().mount("/", routes![get, set]).manage(db_mtx).launch();
+
 }
 
 
@@ -129,7 +128,7 @@ pub mod tests {
     {
 
         let res = client
-            .post(&format!("http://127.0.0.1:8000/{}", path))
+            .post(&format!("http://localhost:8001/{}", path))
             .json(&body)
             .send();
         Some(res.unwrap().text().unwrap())
