@@ -1,4 +1,7 @@
-
+/// to run:
+/// 1: go to rocket_server -> cargo run
+/// 2: cargo run [party_id] [num_parties] i.e. cargo run 1 3 to run as party1 in a 3 party protocol
+/// 3. in separate terminals run the other parties, i.e. cargo run 2 3 and cargo run 3 3
 extern crate multi_party_ed25519;
 extern crate curv;
 extern crate reqwest;
