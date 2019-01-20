@@ -20,15 +20,18 @@ use curv::{BigInt,FE,GE};
 use curv::elliptic::curves::traits::ECScalar;
 use std::time::Duration;
 
+const PARTIES: u32 = 3;
+
 #[derive(Hash)]
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct TupleKey {
     pub first: String,
-    pub second: String
+    pub second: String,
+    pub third: String,
 }
 impl TupleKey {
-    fn new(first: String, second: String) -> TupleKey {
-        return TupleKey {first, second };
+    fn new(first: String, second: String, third: String) -> TupleKey {
+        return TupleKey {first, second, third };
     }
 }
 fn pr<T : std::fmt::Debug + ?Sized>(x: &String) {
@@ -36,8 +39,14 @@ fn pr<T : std::fmt::Debug + ?Sized>(x: &String) {
 }
 impl fmt::Display for TupleKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({}, {})", self.first, self.second)
+        write!(f, "({}, {}, {})", self.first, self.second,  self.third)
     }
+}
+
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub struct PartySignup {
+    pub number: u32,
+    pub uuid: String,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -59,20 +68,32 @@ fn main(){
     let eight_inv = eight.invert();
     // delay:
     let ten_millis = time::Duration::from_millis(10);
+    /*
     let party_num_string = env::args().nth(1).unwrap();
     let party_num_int: i32 = party_num_string.parse().unwrap();
     let n_string = env::args().nth(2).unwrap();
     let n: i32 = n_string.parse().unwrap();
+    */
     let message: [u8; 4] = [79, 77, 69, 82]; //TODO: make arg
     let client = Client::new();
+
+    let party_i_signup_result = signup(&client);
+
+    assert!(party_i_signup_result.is_ok());
+    let party_i_signup = party_i_signup_result.unwrap();
+    println!("{:?}", party_i_signup.clone());
+
+    let party_num_int = party_i_signup.number.clone();
+    let uuid = party_i_signup.uuid;
+
 
     let party_key = KeyPair::create();
     let (party_ephemeral_key, sign_first_message, sign_second_message) =
         Signature::create_ephemeral_key_and_commit(&party_key, &message);
 
     //round 0: send public key, get public keys from other parties (the protocol is not specifying any thing on how to share pubkeys)
-    assert!(send(&client, party_num_int.clone(), "round0", serde_json::to_string(&party_key.public_key).unwrap()).is_ok());
-    let round0_ans_vec = poll_for_peers(&client, party_num_int.clone(), n.clone(), ten_millis.clone(),"round0" );
+    assert!(send(&client, party_num_int.clone(), "round0", serde_json::to_string(&party_key.public_key).unwrap(), uuid.clone()).is_ok());
+    let round0_ans_vec = poll_for_peers(&client, party_num_int.clone(), PARTIES, ten_millis.clone(),"round0", uuid.clone() );
 
 
 
@@ -80,7 +101,7 @@ fn main(){
     //compute apk:
     let mut j = 0;
     let mut pks: Vec<GE> = Vec::new();
-    for i in 1..n+1 {
+    for i in 1..PARTIES+1 {
 
         if i == party_num_int {
             pks.push(party_key.public_key.clone());
@@ -98,18 +119,18 @@ fn main(){
     //////////////////////////////////////////////////////////////////////////////
 
     // send commitment to ephemeral public keys, get round 1 commitments of other parties
-    assert!(send(&client, party_num_int.clone(), "round1", serde_json::to_string(&sign_first_message).unwrap()).is_ok());
-    let round1_ans_vec = poll_for_peers(&client, party_num_int.clone(), n.clone(), ten_millis.clone(),"round1" );
+    assert!(send(&client, party_num_int.clone(), "round1", serde_json::to_string(&sign_first_message).unwrap(), uuid.clone()).is_ok());
+    let round1_ans_vec = poll_for_peers(&client, party_num_int.clone(), PARTIES, ten_millis.clone(),"round1" , uuid.clone());
 
     // round 2: send ephemeral public keys and  check commitments correctness
-    assert!(send(&client, party_num_int.clone(), "round2", serde_json::to_string(&sign_second_message).unwrap()).is_ok());
-    let round2_ans_vec = poll_for_peers(&client, party_num_int.clone(), n.clone(), ten_millis.clone(),"round2" );
+    assert!(send(&client, party_num_int.clone(), "round2", serde_json::to_string(&sign_second_message).unwrap(), uuid.clone()).is_ok());
+    let round2_ans_vec = poll_for_peers(&client, party_num_int.clone(), PARTIES, ten_millis.clone(),"round2", uuid.clone());
 
     //////////////////////////////////////////////////////////////////////////////
     // test commitments and construct R
     let mut Ri: Vec<GE> = Vec::new();
     let mut j = 0;
-    for i in 1..n+1 {
+    for i in 1..PARTIES+1 {
         if i != party_num_int{
             let party_i_first_message : SignFirstMsg = serde_json::from_str(&round1_ans_vec[j]).unwrap();
             let party_i_second_message : SignSecondMsg = serde_json::from_str(&round2_ans_vec[j]).unwrap();
@@ -141,15 +162,15 @@ fn main(){
     //////////////////////////////////////////////////////////////////////////////
 
     // round 3: send ephemeral public keys and  check commitments correctness
-    assert!(send(&client, party_num_int.clone(), "round3", serde_json::to_string(&si).unwrap()).is_ok());
-    let round3_ans_vec = poll_for_peers(&client, party_num_int.clone(), n.clone(), ten_millis.clone(),"round3" );
+    assert!(send(&client, party_num_int.clone(), "round3", serde_json::to_string(&si).unwrap(), uuid.clone()).is_ok());
+    let round3_ans_vec = poll_for_peers(&client, party_num_int.clone(), PARTIES, ten_millis.clone(),"round3" , uuid.clone());
 
     //////////////////////////////////////////////////////////////////////////////
 
     // compute signature:
     let mut j = 0;
     let mut s: Vec<Signature> = Vec::new();
-    for i in 1..n+1 {
+    for i in 1..PARTIES+1 {
 
         if i == party_num_int {
             s.push(si.clone());
@@ -183,10 +204,23 @@ pub fn postb<T>(client: &Client, path: &str, body: T) -> Option<String>
 
 }
 
-pub fn send(client: &Client, party_num: i32,  round: &str, data: String) -> Result<(),()>{
+pub fn signup(client: &Client) -> Result<(PartySignup),()>{
+    let key  = TupleKey{
+        first: "signup".to_string(),
+        second: "".to_string(),
+        third: "".to_string(),
+    };
+
+    let res_body = postb(&client, "signup", key).unwrap();
+    let answer : Result<(PartySignup),()> = serde_json::from_str(&res_body).unwrap();
+    return answer;
+}
+
+pub fn send(client: &Client, party_num: u32,  round: &str, data: String, uuid: String) -> Result<(),()>{
     let key  = TupleKey{
         first: party_num.to_string(),
         second: round.to_string(),
+        third: uuid,
     };
     let entry = Entry{
         key: key.clone(),
@@ -198,7 +232,7 @@ pub fn send(client: &Client, party_num: i32,  round: &str, data: String) -> Resu
     return answer;
 }
 
-pub fn poll_for_peers(client: &Client, party_num: i32, n: i32,  delay: Duration, round: &str) -> Vec<String> {
+pub fn poll_for_peers(client: &Client, party_num: u32, n: u32,  delay: Duration, round: &str, uuid: String) -> Vec<String> {
     let mut ans_vec = Vec::new();
     for i in 1..n+1 {
 
@@ -206,6 +240,7 @@ pub fn poll_for_peers(client: &Client, party_num: i32, n: i32,  delay: Duration,
             let key = TupleKey {
                 first: i.to_string(),
                 second: round.to_string(),
+                third: uuid.clone(),
             };
             let index = Index { key };
             loop {
