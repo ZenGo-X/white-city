@@ -1,11 +1,3 @@
-#[macro_use]
-extern crate serde_derive;
-
-extern crate serde;
-extern crate serde_json;
-extern crate tokio_core;
-extern crate byteorder;
-
 use serde::{Serialize, Deserialize};
 use serde_json;
 use tokio_core::io::{Codec, EasyBuf};
@@ -84,7 +76,7 @@ impl<In, Out> Codec for LengthPrefixedJson<In, Out>
         }
 
         // Insert our length bytes at the front of `buf`.
-        let mut cursor = io::Cursor::new(buf.as_mut());
+        let mut cursor: io::Cursor<&mut Vec<u8>> = io::Cursor::new(buf.as_mut());
         cursor.set_position(0);
         cursor.write_u16::<BigEndian>(len)
     }

@@ -1,5 +1,5 @@
 [package]
-name = "relay-server"
+name = "relay-server-common"
 version = "0.1.0"
 authors = ["Avi <kozokinavi@gmail.com>"]
 
@@ -7,8 +7,7 @@ authors = ["Avi <kozokinavi@gmail.com>"]
 serde = "0.8"
 serde_derive = "0.8"
 serde_json = "0.8"
-futures = "0.1"
 tokio-core = "0.1"
 byteorder = "1.0"
 
-relay-server-common = { path = "../relay-server/common" }
+futures = "0.1"
