@@ -8,6 +8,8 @@ extern crate byteorder;
 use std::vec::Vec;
 
 mod codec;
+pub mod protocol;
+pub mod common;
 
 pub type ProtocolIdentifier = u32;
 pub type PeerIdentifier = u32;
@@ -80,7 +82,9 @@ impl AbortMessage{
 
 #[derive(Default, Clone, Debug, Deserialize, Serialize)]
 pub struct RegisterMessage {
-    pub protocol_id: ProtocolIdentifier
+    pub protocol_id: ProtocolIdentifier,
+
+    pub capacity: u32,
 }
 
 #[derive(Default, Clone, Debug, Deserialize, Serialize)]
@@ -138,9 +142,10 @@ impl ClientMessage {
         }
     }
 
-    pub fn register(&mut self, protocol_id: ProtocolIdentifier) {
+    pub fn register(&mut self, protocol_id: ProtocolIdentifier, capacity: u32) {
         self.register = Some(RegisterMessage{
-            protocol_id
+            protocol_id,
+            capacity,
         });
 
     }

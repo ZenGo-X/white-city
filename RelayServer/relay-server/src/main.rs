@@ -47,14 +47,21 @@ use relay_server_common::{
     AbortMessage,
 };
 
-//static DEFAULT_PEER_IDENTIFIER: PeerIdentifier = 0 as PeerIdentifier; // temporary
+use relay_server_common::protocol::{
+    ProtocolDescriptor
+};
+
+use relay_server_common::common::{
+    RELAY_ERROR_RESPONSE
+};
+
 
 // Debug helper function to show type of a future
 fn _debugf<F: Future<Item = (), Error = ()>>(_: F) {}
 
 #[derive(Debug)]
 pub enum ClientMessageType {
-    Register(ProtocolIdentifier),
+    Register,
     Abort,
     RelayMessage,
     Undefined,
@@ -79,11 +86,6 @@ pub struct Peer {
     pub registered: bool,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct Protocol {
-    pub id: ProtocolIdentifier,
-    pub capacity: u32
-}
 
 impl Peer {
     pub fn new(client: Client) -> Peer {
@@ -114,11 +116,10 @@ struct RelaySession {
 
     active_peers: RefCell<u32>,
 
-    protocol: Protocol,
+    protocol: RefCell<ProtocolDescriptor>,
 
     state: RefCell<RelaySessionState>,
 
-    turn : RefCell<u32>, //TODO switch to a struct for more flexible turn changing
 }
 
 impl RelaySession{
@@ -130,47 +131,70 @@ impl RelaySession{
     /// after adding this address as a peer,
     /// the state might change to either Uninitialized (if this is the first peer registering)
     /// or Initialized (meaning session has reached the required # of participants)
-    fn register_new_peer(&self, addr: SocketAddr, protocol_id: ProtocolIdentifier) -> Option<u32> {
+    fn register_new_peer(&self, addr: SocketAddr, protocol_id: ProtocolIdentifier, capacity: u32) -> Option<u32> {
         let _addr = &addr;
         let number_of_active_peers = self.peers.borrow().values().filter(|p| p.registered).fold(0, |acc, _| acc + 1);
-        match self.can_register(_addr, protocol_id){
+        let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
+        match self.can_register(_addr, protocol_descriptor){
             true => {
+
                 let mut peers = self.peers.borrow_mut();
                 let peer = peers.get_mut(_addr).unwrap_or_else(|| panic!("No conection"));
+
+                // activate this connection as a peer
                 peer.registered = true;
                 peer.peer_id = number_of_active_peers + 1;
+
+                // if needed, set the ProtocolDescriptor for this sessuib
+                // and change the state
                 match self.state.clone().into_inner() {
                     RelaySessionState::Empty => {
-                        self.set_protocol(protocol_id);
+                        self.protocol.replace(ProtocolDescriptor::new(protocol_id, capacity));
+                        self.set_protocol(protocol_id, capacity);
                         self.state.replace(RelaySessionState::Uninitialized);
                     },
                     _ => {}
                 }
-                if self.protocol.capacity == number_of_active_peers + 1{
+                if self.protocol.clone().into_inner().capacity == number_of_active_peers + 1 {
                     self.state.replace(RelaySessionState::Initialized);
                 }
-                return Some(number_of_active_peers + 1);
+                return Some(number_of_active_peers + 1); //peer_id
             },
             false => {
                 println!("unable to register {:}", addr); // error
-                None
+                None //TODO need to send an appropriate response
             }
         }
     }
 
     /// Checks if it is possible for this address
     /// to register as a peer in this session
-    fn can_register(&self, addr: &SocketAddr, protocol_id: ProtocolIdentifier) -> bool{
+    fn can_register(&self, addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool{
         match self.state.clone().into_inner() {
-            RelaySessionState::Uninitialized => {},
-            RelaySessionState::Empty => {},
-            _ => return false,
+            // if this is the first peer to register
+            // check that the protocol is valid
+            RelaySessionState::Empty => {
+                println!("checking if protocol description is valid");
+                if !relay_server_common::protocol::is_valid_protocol(&protocol){
+                    return false;
+                }
+            },
+            // if there is already a set protocol,
+            // check that the peer wants to register to the set protocol
+            RelaySessionState::Uninitialized => {
+                println!("checking if protocol description is same as aet protocol description");
+                let prot = self.protocol.clone().into_inner();
+                if !(prot.id == protocol.id && prot.capacity == protocol.capacity){
+                    return false;
+                }
+            },
+            _ => {
+                println!("Relay session state is neither empty nor uninitialized ");
+                return false
+            },
         }
-        if !RelaySession::valid_protocol(protocol_id) {
-            return false;
-        }
+        // register the peer iff it has an active connection and did not register yet
         if let Some(peer) = self.peers.borrow().get(addr) {
-            // we can register the peer iff it has an active connection and did not register yet
             return !peer.registered;
         }
         false
@@ -180,32 +204,38 @@ impl RelaySession{
     /// check if this relay message sent from the give SocketAddr
     /// is valid to send to rest of the peers
     fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> bool{
+
         println!("Checking if {:} can relay", msg.peer_number);
         println!("Server state: {:?}", self.state.clone().into_inner());
-        println!("Turn of peer #: {:}", self.turn.clone().into_inner());
+        println!("Turn of peer #: {:}", self.protocol.clone().into_inner().turn.clone().into_inner());
+
         match self.state.clone().into_inner() {
-            RelaySessionState::Initialized => {},
-            _ => return false,
+            RelaySessionState::Initialized => {
+                println!("Relay sessions state is initialized");
+            },
+            _ => {
+                println!("Relay sessions state is not initialized");
+                return false
+            },
         }
         // validate the sender in the message (peer_number field) is the peer associated with this address
         let sender = msg.peer_number;
         let mut peers = self.peers.borrow_mut();
         let peer = peers.get_mut(from);
+
         // if peer is present and registered
         if let Some(p) = peer {
             if p.registered && p.peer_id == sender {
-                return self.turn.clone().into_inner() + 1 == p.peer_id
+                // check if it is this peers turn
+                return self.protocol.clone().into_inner().next() == p.peer_id
             }
         }
         false
     }
 
-    fn valid_protocol(protocol_id: ProtocolIdentifier) -> bool {
-        return true; //TODO unimplemented
-    }
 
-    fn set_protocol(&self, protocol_id: ProtocolIdentifier) {
-        //TODO unimplemented
+    fn set_protocol(&self, protocol_id: ProtocolIdentifier, capacity:u32) {
+
     }
 
 }
@@ -224,14 +254,11 @@ impl RelaySession {
 
             active_peers: RefCell::new(0),
 
-            protocol: (Protocol{
-                id: 0,
-                capacity:2,
-            }),
+            protocol: RefCell::new(relay_server_common::protocol::ProtocolDescriptor::new(0,2)),
 
             state: RefCell::new(RelaySessionState::Empty),
 
-            turn: RefCell::new(0), // peer_1s turn initially
+            //turn: RefCell::new(0), // peer_1s turn initially
         }
     }
 
@@ -289,25 +316,31 @@ impl RelaySession {
     /// try to send a relay message to the desired peers
     pub fn relay_message<E: 'static>(&self, from: &SocketAddr, msg: RelayMessage) -> Box<Future<Item = (), Error = E>>{
         let mut server_msg = ServerMessage::new();
+        let mut _to = vec![];
+        let peer_id = self.peers.borrow_mut().get_mut(from).unwrap().peer_id;
         if self.can_relay(from, &msg) {
             server_msg.relay_message = Some(msg.clone());
+            _to = msg.to;
+            let sender_index = _to.iter().position(|x| *x == peer_id);
+            if sender_index.is_some(){
+                _to.remove(sender_index.unwrap());
+            }
+            self.protocol.clone().into_inner().advance_turn();
+
+            println!("sending relay message: {:?}", server_msg);
+            println!("sending to: {:?}", _to);
         }
-        let peer_id = self.peers.borrow_mut().get_mut(from).unwrap().peer_id;
-        let mut _to = msg.to;
-        let sender_index = _to.iter().position(|x| *x == peer_id);
-        if sender_index.is_some(){
-            _to.remove(sender_index.unwrap());
+        else {
+            // send an error response to sender
+            server_msg.response = Some(ServerResponse::ErrorResponse(String::from(RELAY_ERROR_RESPONSE)));
+            _to = vec![peer_id];
         }
-        println!("sending relay message: {:?}", server_msg);
-        println!("sending to: {:?}", _to);
-        let current_turn = self.turn.clone().into_inner();
-        self.turn.replace((current_turn + 1) % self.protocol.capacity );
         self.multiple_send(server_msg, &_to)
     }
     /// try to register a new peer
-    pub fn register<E: 'static>(&self, addr: SocketAddr, protocol_id: ProtocolIdentifier)  -> Box<Future<Item = (), Error = E>> {
+    pub fn register<E: 'static>(&self, addr: SocketAddr, protocol_id: ProtocolIdentifier, capacity: u32)  -> Box<Future<Item = (), Error = E>> {
         let mut server_msg = ServerMessage::new();
-        let peer_id = self.register_new_peer(addr, protocol_id);
+        let peer_id = self.register_new_peer(addr, protocol_id, capacity);
         if peer_id.is_some() {
             server_msg.response = Some(ServerResponse::Register(peer_id.unwrap()));
         }
@@ -324,7 +357,7 @@ impl RelaySession {
         let peer= self.get_peer(&addr);
         match peer {
             Some(p) => {
-                server_msg.abort = Some(AbortMessage::new(p.peer_id, self.protocol.clone().id));
+                server_msg.abort = Some(AbortMessage::new(p.peer_id, self.protocol.clone().into_inner().id));
                 self.state.replace(RelaySessionState::Aborted);
                 let mut to = Vec::new();
                 let peers = self.peers.borrow();
@@ -365,7 +398,7 @@ impl RelaySession {
         }
         if peer_disconnected {
             let mut server_msg= ServerMessage::new();
-            server_msg.abort = Some(AbortMessage::new(peer_id, self.protocol.clone().id));
+            server_msg.abort = Some(AbortMessage::new(peer_id, self.protocol.clone().into_inner().id));
             self.state.replace(RelaySessionState::Aborted);
             return self.multiple_send(server_msg, &to);
         }
@@ -392,7 +425,7 @@ impl RelaySession {
 pub fn resolve_msg_type(msg: ClientMessage) -> ClientMessageType {
 
     if msg.register.is_some(){
-        return ClientMessageType::Register(msg.register.unwrap().protocol_id);
+        return ClientMessageType::Register;
     }
     if msg.relay_message.is_some(){
         return ClientMessageType::RelayMessage;
@@ -448,9 +481,10 @@ fn main() {
 
             // this is our main logic for receiving messages from peer
             match msg_type {
-                ClientMessageType::Register(protocol_id) => {
-                    println!("got register message. protocol id requested: {}", protocol_id);
-                    relay_session_inner.register(addr, protocol_id)
+                ClientMessageType::Register => {
+                    let register = msg.register.unwrap();
+                    println!("got register message. protocol id requested: {}", register.protocol_id);
+                    relay_session_inner.register(addr, register.protocol_id, register.capacity)
                 },
                 ClientMessageType::RelayMessage => {
                     let peer = relay_session_inner.get_peer(&addr).unwrap_or_else(||
@@ -508,3 +542,5 @@ fn main() {
     // execute server
     core.run(srv).unwrap();
 }
+
+

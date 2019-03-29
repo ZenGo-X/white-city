@@ -35,8 +35,7 @@ use relay_server_common::{
 struct ProtocolSession {
     pub registered: bool,
     pub peer_id: PeerIdentifier,
-    pub protocol: ProtocolIdentifier,
-
+    pub protocol_id: ProtocolIdentifier,
     pub next_message: Option<ClientMessage>,
 }
 
@@ -45,7 +44,7 @@ impl ProtocolSession {
         ProtocolSession {
             registered: false,
             peer_id: 0,
-            protocol: 0,
+            protocol_id: 0,
             next_message: None,
         }
     }
@@ -93,8 +92,8 @@ fn main() {
     let _tcp = TcpStream::connect(&addr, &handle);
 
     // define which protocol id we would like to participate in
-    let protocol_id :ProtocolIdentifier = 123;
-
+    let protocol_id :ProtocolIdentifier = 1;
+    let capacity :u32 = 2;
     let mut session = ProtocolSession::new();
 
     let client = _tcp.and_then(|stream| {
@@ -103,8 +102,8 @@ fn main() {
         let framed_stream = stream.framed(ClientToServerCodec::new());
         // prepare register message
         let mut msg = ClientMessage::new();
-        let register_msg = msg.register(protocol_id);
-        session.protocol = protocol_id;
+        let register_msg = msg.register(protocol_id, capacity);
+        session.protocol_id = protocol_id;
 
         // send register message to server
         framed_stream.send(msg)

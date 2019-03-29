@@ -1,0 +1,1 @@
+pub static RELAY_ERROR_RESPONSE:&str ="Can not relay message";

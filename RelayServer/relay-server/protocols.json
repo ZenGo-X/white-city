@@ -1,0 +1,9 @@
+{
+  "protocols":[
+    {
+      "id": 1,
+      "names": ["Multi-party-eddsa","multi-party-eddsa"],
+      "capacities": [2]
+    }
+  ]
+}
