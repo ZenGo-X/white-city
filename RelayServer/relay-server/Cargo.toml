@@ -12,3 +12,6 @@ tokio-core = "0.1"
 byteorder = "1.0"
 
 relay-server-common = { path = "../relay-server/common" }
+
+multi-party-ed25519 = { git = "https://github.com/KZen-networks/multi-party-eddsa" }
+curv = "0.0.0"

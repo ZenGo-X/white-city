@@ -2,8 +2,8 @@
   "protocols":[
     {
       "id": 1,
-      "names": ["Multi-party-eddsa","multi-party-eddsa"],
-      "capacities": [2]
+      "names": ["Multi-party-eddsa","multi-party-eddsa", "multi_party_ed25519"],
+      "capacities": [2, 3]
     }
   ]
 }

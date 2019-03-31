@@ -52,7 +52,8 @@ use relay_server_common::protocol::{
 };
 
 use relay_server_common::common::{
-    RELAY_ERROR_RESPONSE
+    RELAY_ERROR_RESPONSE,
+    CANT_REGISTER_RESPONSE,
 };
 
 
@@ -162,7 +163,7 @@ impl RelaySession{
             },
             false => {
                 println!("unable to register {:}", addr); // error
-                None //TODO need to send an appropriate response
+                None
             }
         }
     }
@@ -234,10 +235,6 @@ impl RelaySession{
     }
 
 
-    fn set_protocol(&self, protocol_id: ProtocolIdentifier, capacity:u32) {
-
-    }
-
 }
 
 impl RelaySession {
@@ -258,7 +255,6 @@ impl RelaySession {
 
             state: RefCell::new(RelaySessionState::Empty),
 
-            //turn: RefCell::new(0), // peer_1s turn initially
         }
     }
 
@@ -343,6 +339,8 @@ impl RelaySession {
         let peer_id = self.register_new_peer(addr, protocol_id, capacity);
         if peer_id.is_some() {
             server_msg.response = Some(ServerResponse::Register(peer_id.unwrap()));
+        } else {
+            server_msg.response = Some(ServerResponse::ErrorResponse(String::from(CANT_REGISTER_RESPONSE)));
         }
         self.send_response(addr, server_msg)
     }
@@ -373,7 +371,7 @@ impl RelaySession {
     }
 
     /// handle a closed connection
-    /// if it an active peer disconnected - abort the sesion
+    /// if it an active peer disconnected - abort the session
     /// otherwise, simply remove the connection of this address from the peers collection
     pub fn connection_closed<E: 'static>(&mut self, addr:SocketAddr) -> Box<Future<Item = (), Error = E>>{
         let mut to= Vec::new();

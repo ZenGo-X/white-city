@@ -91,17 +91,22 @@ fn main() {
     let handle = core.handle();
     let _tcp = TcpStream::connect(&addr, &handle);
 
-    // define which protocol id we would like to participate in
-    let protocol_id :ProtocolIdentifier = 1;
-    let capacity :u32 = 2;
+
     let mut session = ProtocolSession::new();
 
     let client = _tcp.and_then(|stream| {
         println!("sending register message");
 
         let framed_stream = stream.framed(ClientToServerCodec::new());
+
+        // define which protocol id we would like to participate in
+        let protocol_id :ProtocolIdentifier = 1;
+        let capacity :u32 = 2;
+
+
         // prepare register message
         let mut msg = ClientMessage::new();
+
         let register_msg = msg.register(protocol_id, capacity);
         session.protocol_id = protocol_id;
 
@@ -120,7 +125,7 @@ fn main() {
                             ServerResponse::Register(peer_id) => {
                                 println!("Peer identifier: {}",peer_id);
                                 // create a mock relay message
-                                let mut client_message= ClientMessage::new();
+                                 let mut client_message= ClientMessage::new();
                                 let mut relay_message = RelayMessage::new(peer_id, protocol_id);
                                 let mut to: Vec<u32> = Vec::new();
                                 if peer_id == 2{
