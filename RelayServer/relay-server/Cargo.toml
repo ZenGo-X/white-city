@@ -10,6 +10,7 @@ serde_json = "0.8"
 futures = "0.1"
 tokio-core = "0.1"
 byteorder = "1.0"
+dict = "0.1.5"
 
 relay-server-common = { path = "../relay-server/common" }
 

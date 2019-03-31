@@ -6,6 +6,7 @@ extern crate tokio_core;
 extern crate byteorder;
 
 use std::vec::Vec;
+use serde::{Serialize, Deserialize};
 
 mod codec;
 pub mod protocol;
@@ -13,8 +14,8 @@ pub mod common;
 
 pub type ProtocolIdentifier = u32;
 pub type PeerIdentifier = u32;
-pub type MessagePayload = String;
-
+//pub type MessagePayload = String;
+pub type MessagePayload = serde_json::Value;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct RelayMessage {
@@ -32,20 +33,20 @@ impl RelayMessage {
             protocol_id,
             round: 0,
             to: Vec::new(),
-            message: "".to_string()
+            message: json!(""),
         }
     }
 
-    pub fn set_message_params<S: Into<String>>(
+    pub fn set_message_params<S>(
         &mut self,
         round_number: u32,
         to: Vec<PeerIdentifier>,
         message: S
-    )
+    ) where S: Deserialize + Serialize
     {
         self.round = round_number;
         self.to = to;
-        self.message = message.into();
+        self.message = message;
     }
 
 }

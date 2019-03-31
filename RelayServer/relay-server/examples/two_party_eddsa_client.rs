@@ -8,6 +8,8 @@
 extern crate futures;
 extern crate tokio_core;
 extern crate relay_server_common;
+extern crate dict;
+
 
 use std::env;
 use std::io::{self, Read, Write};
@@ -32,10 +34,15 @@ use relay_server_common::{
     PeerIdentifier
 };
 
+// unique to our eddsa client
 extern crate multi_party_ed25519;
 extern crate curv;
 
-use protocols::aggsig::{test_com, verify, KeyPair, Signature};
+use multi_party_ed25519::protocols::aggsig::{
+    test_com, verify, KeyPair, Signature, EphemeralKey
+};
+use curv;
+use dict::{ Dict, DictIface };
 
 // ClientSession holds session data
 #[derive(Default, Debug, Clone)]
@@ -45,7 +52,10 @@ struct ProtocolSession {
     pub protocol_id: ProtocolIdentifier,
     pub capacity: u32,
     pub next_message: Option<ClientMessage>,
+    pub bc_dests: Vec<ProtocolIdentifier>,
+    pub  protocol_data: ProtocolData,
 }
+
 
 impl ProtocolSession {
     pub fn new(protocol_id:ProtocolIdentifier, capacity: u32) -> ProtocolSession {
@@ -55,6 +65,31 @@ impl ProtocolSession {
             protocol_id,
             capacity,
             next_message: None,
+            bc_dests: (1..(capacity+1)).collect(),
+            protocol_data: ProtocolData::new(),
+        }
+    }
+
+    pub fn set_bc_dests(&mut self){
+        let index = self.peer_id.clone() - 1;
+        self.bc_dests.remove(index);
+    }
+}
+
+struct ProtocolData{
+    pub peerData: Dict<PeerData>,
+}
+
+struct PeerData{
+    pub commitment: BigInt, // commitment
+    pub key: Option<EphemeralKey>, // key
+    pub sig: Option<Signature>, // k + r
+}
+
+impl ProtocolData{
+    pub fn new() -> ProtocolData {
+        ProtocolData{
+            peerData:Dict::<PeerData>::new(),
         }
     }
 }
@@ -87,6 +122,9 @@ pub enum MessageProcessResult {
 }
 
 fn main() {
+    // message for signing
+    let message: [u8; 4] = [79,77,69,82];
+
     // TODO take these from ARGV
     let PROTOCOL_IDENTIFIER_ARG = 1;
     let PROTOCOL_CAPACITY_ARG = 2 as ProtocolIdentifier;
@@ -117,7 +155,7 @@ fn main() {
         let mut msg = ClientMessage::new();
         let register_msg = msg.register(session.protocol_id.clone(), session.capacity.clone());
 
-        let session = session.clone();
+        let mut session = session.clone();
         // send register message to server
         framed_stream.send(msg)
             .and_then(|stream| {
@@ -131,23 +169,29 @@ fn main() {
                             match server_response {
                                 ServerResponse::Register(peer_id) => {
                                     println!("Peer identifier: {}",peer_id);
+                                    // Set the session parameters
                                     session.peer_id.replace(peer_id);
+                                    session.set_bc_dests();
+
+                                    //after register, generate signing key
+                                    let key = KeyPair::create();
+                                    let (ephemeral_key, sign_first_message, sign_second_message) =
+                                        Signature::create_ephemeral_key_and_commit(&key, &message);
+
+                                    let commitment = &sign_first_message.commitment.clone();
+                                    println!("sending commitment");
 
                                     // create a mock relay message
                                     let mut client_message= ClientMessage::new();
                                     let mut relay_message = RelayMessage::new(peer_id, protocol_id);
-                                    let mut to: Vec<u32> = Vec::new();
-                                    if peer_id == 2{
-                                        to.push(1);
-                                    } else {
-                                        to.push(2);
-                                    }
+                                    let mut to: Vec<u32> = session.bc_dests.clone();
 
                                     // wait a little so we can spawn the second client
                                     let wait_time = time::Duration::from_millis(5000);
                                     thread::sleep(wait_time);
 
-                                    relay_message.set_message_params(0, to, format!("Hi from {}", peer_id));
+
+                                    relay_message.set_message_params(0, to, commitment);
                                     client_message.relay_message = Some(relay_message.clone());
                                     //session.next_message = Some(client_message);
                                     return Ok(client_message);

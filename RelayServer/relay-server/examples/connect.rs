@@ -125,7 +125,7 @@ fn main() {
                             ServerResponse::Register(peer_id) => {
                                 println!("Peer identifier: {}",peer_id);
                                 // create a mock relay message
-                                 let mut client_message= ClientMessage::new();
+                                let mut client_message= ClientMessage::new();
                                 let mut relay_message = RelayMessage::new(peer_id, protocol_id);
                                 let mut to: Vec<u32> = Vec::new();
                                 if peer_id == 2{
