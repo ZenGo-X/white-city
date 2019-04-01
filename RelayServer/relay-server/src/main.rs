@@ -151,7 +151,6 @@ impl RelaySession{
                 match self.state.clone().into_inner() {
                     RelaySessionState::Empty => {
                         self.protocol.replace(ProtocolDescriptor::new(protocol_id, capacity));
-                        self.set_protocol(protocol_id, capacity);
                         self.state.replace(RelaySessionState::Uninitialized);
                     },
                     _ => {}
