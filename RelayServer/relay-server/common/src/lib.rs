@@ -34,7 +34,7 @@ impl RelayMessage {
             protocol_id,
             round: 0,
             to: Vec::new(),
-            message: String::from_str(""),
+            message: String::from(""),
         }
     }
 
