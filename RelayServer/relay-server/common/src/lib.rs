@@ -37,17 +37,30 @@ impl RelayMessage {
         }
     }
 
-    pub fn set_message_params<S>(
+//    pub fn set_message_params<S>(
+//        &mut self,
+//        round_number: u32,
+//        to: Vec<PeerIdentifier>,
+//        message: S
+//    ) where S: Deserialize + Serialize
+//    {
+//        self.round = round_number;
+//        self.to = to;
+//        self.message = message;
+//    }
+
+    pub fn set_message_params(
         &mut self,
         round_number: u32,
         to: Vec<PeerIdentifier>,
-        message: S
-    ) where S: Deserialize + Serialize
+        message: serde_json::Value
+    )
     {
         self.round = round_number;
         self.to = to;
         self.message = message;
     }
+
 
 }
 
