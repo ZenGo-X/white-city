@@ -7,6 +7,7 @@ extern crate byteorder;
 
 use std::vec::Vec;
 use serde::{Serialize, Deserialize};
+use serde_json::*;
 
 mod codec;
 pub mod protocol;
@@ -33,7 +34,7 @@ impl RelayMessage {
             protocol_id,
             round: 0,
             to: Vec::new(),
-            message: json!(""),
+            message: json!({}),
         }
     }
 
