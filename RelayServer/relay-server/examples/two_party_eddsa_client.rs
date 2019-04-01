@@ -41,12 +41,13 @@ extern crate curv;
 use multi_party_ed25519::protocols::aggsig::{
     test_com, verify, KeyPair, Signature, EphemeralKey
 };
+
 use relay_server_common::common::*;
-use curv;
+use curv::elliptic::curves::ed25519;
 use dict::{ Dict, DictIface };
 
 // ClientSession holds session data
-//#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 struct ProtocolSession {
     pub registered: bool,
     pub peer_id: RefCell<PeerIdentifier>,
@@ -54,7 +55,7 @@ struct ProtocolSession {
     pub capacity: u32,
     pub next_message: Option<ClientMessage>,
     pub bc_dests: Vec<ProtocolIdentifier>,
-    pub  protocol_data: ProtocolData,
+    //pub  protocol_data: ProtocolData,
 }
 
 
@@ -67,34 +68,34 @@ impl ProtocolSession {
             capacity,
             next_message: None,
             bc_dests: (1..(capacity+1)).collect(),
-            protocol_data: ProtocolData::new(),
+            //protocol_data: ProtocolData::new(),
         }
     }
 
     pub fn set_bc_dests(&mut self){
-        let index = self.peer_id.clone() - 1;
-        self.bc_dests.remove(index);
+        let index = self.peer_id.clone().into_inner() - 1;
+        self.bc_dests.remove(index as usize);
     }
 }
 
-struct ProtocolData{
-    pub peer_data: Dict<PeerData>,
-}
+//struct ProtocolData{
+//    pub peer_data: Dict<PeerData>,
+//}
 
 //#[derive(Default, Debug, Clone)]
-struct PeerData{
-    pub commitment: BigInt, // commitment
-    pub key: Option<EphemeralKey>, // key
-    pub sig: Option<Signature>, // k + r
-}
+//struct PeerData{
+//    pub commitment: BigInt, // commitment
+//    pub key: Option<EphemeralKey>, // key
+//    pub sig: Option<Signature>, // k + r
+//}
 
-impl ProtocolData{
-    pub fn new() -> ProtocolData {
-        ProtocolData{
-            peer_data:Dict::<PeerData>::new(),
-        }
-    }
-}
+//impl ProtocolData{
+//    pub fn new() -> ProtocolData {
+//        ProtocolData{
+//            peer_data:Dict::<PeerData>::new(),
+//        }
+//    }
+//}
 
 #[derive(Debug)]
 pub enum ServerMessageType { // TODO this is somewhat duplicate
