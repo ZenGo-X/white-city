@@ -77,9 +77,10 @@ impl ProtocolSession {
 }
 
 struct ProtocolData{
-    pub peerData: Dict<PeerData>,
+    pub peer_data: Dict<PeerData>,
 }
 
+#[derive(Default, Debug, Clone)]
 struct PeerData{
     pub commitment: BigInt, // commitment
     pub key: Option<EphemeralKey>, // key
@@ -89,7 +90,7 @@ struct PeerData{
 impl ProtocolData{
     pub fn new() -> ProtocolData {
         ProtocolData{
-            peerData:Dict::<PeerData>::new(),
+            peer_data:Dict::<PeerData>::new(),
         }
     }
 }
@@ -191,7 +192,7 @@ fn main() {
                                     thread::sleep(wait_time);
 
 
-                                    relay_message.set_message_params(0, to, commitment);
+                                    relay_message.set_message_params(0, to, serde_json::to_value(commitment).unwrap());
                                     client_message.relay_message = Some(relay_message.clone());
                                     //session.next_message = Some(client_message);
                                     return Ok(client_message);
