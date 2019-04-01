@@ -41,11 +41,12 @@ extern crate curv;
 use multi_party_ed25519::protocols::aggsig::{
     test_com, verify, KeyPair, Signature, EphemeralKey
 };
+use relay_server_common::common::*;
 use curv;
 use dict::{ Dict, DictIface };
 
 // ClientSession holds session data
-#[derive(Default, Debug, Clone)]
+//#[derive(Default, Debug, Clone)]
 struct ProtocolSession {
     pub registered: bool,
     pub peer_id: RefCell<PeerIdentifier>,
@@ -80,7 +81,7 @@ struct ProtocolData{
     pub peer_data: Dict<PeerData>,
 }
 
-#[derive(Default, Debug, Clone)]
+//#[derive(Default, Debug, Clone)]
 struct PeerData{
     pub commitment: BigInt, // commitment
     pub key: Option<EphemeralKey>, // key
@@ -120,6 +121,10 @@ pub enum MessageProcessResult {
     Message,
     NoMessage,
     Abort
+}
+
+fn generate_pk_message(pk: &String) -> String {
+    return format!("{}{}{}", PK_MESSAGE_PREFIX, RELAY_MESSAGE_DELIMITER, pk)
 }
 
 fn main() {
@@ -176,11 +181,14 @@ fn main() {
 
                                     //after register, generate signing key
                                     let key = KeyPair::create();
-                                    let (ephemeral_key, sign_first_message, sign_second_message) =
-                                        Signature::create_ephemeral_key_and_commit(&key, &message);
+                                    let pk = key.public_key;
+                                    let message =  serde_json::to_string(&pk).expect("Failed in serialization");key.public_key;
 
-                                    let commitment = &sign_first_message.commitment.clone();
-                                    println!("sending commitment");
+//                                    let (ephemeral_key, sign_first_message, sign_second_message) =
+//                                        Signature::create_ephemeral_key_and_commit(&key, &message);
+//
+//                                    let commitment = &sign_first_message.commitment.clone();
+//                                    println!("sending commitment");
 
                                     // create a mock relay message
                                     let mut client_message= ClientMessage::new();
@@ -192,7 +200,7 @@ fn main() {
                                     thread::sleep(wait_time);
 
 
-                                    relay_message.set_message_params(0, to, serde_json::to_value(commitment).unwrap());
+                                    relay_message.set_message_params(0, to, generate_pk_message(&message));
                                     client_message.relay_message = Some(relay_message.clone());
                                     //session.next_message = Some(client_message);
                                     return Ok(client_message);

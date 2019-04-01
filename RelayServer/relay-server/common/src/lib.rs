@@ -14,8 +14,8 @@ pub mod common;
 
 pub type ProtocolIdentifier = u32;
 pub type PeerIdentifier = u32;
-//pub type MessagePayload = String;
-pub type MessagePayload = serde_json::Value;
+pub type MessagePayload = String;
+//pub type MessagePayload = serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelayMessage {
@@ -34,33 +34,33 @@ impl RelayMessage {
             protocol_id,
             round: 0,
             to: Vec::new(),
-            message: serde_json::from_str(s).unwrap(),
+            message: String::from_str(""),
         }
     }
 
-//    pub fn set_message_params<S>(
-//        &mut self,
-//        round_number: u32,
-//        to: Vec<PeerIdentifier>,
-//        message: S
-//    ) where S: Deserialize + Serialize
-//    {
-//        self.round = round_number;
-//        self.to = to;
-//        self.message = message;
-//    }
-
-    pub fn set_message_params(
+    pub fn set_message_params<S>(
         &mut self,
         round_number: u32,
         to: Vec<PeerIdentifier>,
-        message: serde_json::Value
-    )
+        message: S
+    ) where S: Deserialize + Serialize
     {
         self.round = round_number;
         self.to = to;
         self.message = message;
     }
+
+//    pub fn set_message_params(
+//        &mut self,
+//        round_number: u32,
+//        to: Vec<PeerIdentifier>,
+//        message: serde_json::Value
+//    )
+//    {
+//        self.round = round_number;
+//        self.to = to;
+//        self.message = message;
+//    }
 
 
 }
