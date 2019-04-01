@@ -17,7 +17,7 @@ pub type PeerIdentifier = u32;
 //pub type MessagePayload = String;
 pub type MessagePayload = serde_json::Value;
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelayMessage {
     pub peer_number: PeerIdentifier, // from
     pub protocol_id: ProtocolIdentifier,
