@@ -29,12 +29,13 @@ pub struct RelayMessage {
 
 impl RelayMessage {
     pub fn new(peer_number: PeerIdentifier, protocol_id: ProtocolIdentifier) -> RelayMessage{
+        let s = r#"{}"#;
         RelayMessage {
             peer_number,
             protocol_id,
             round: 0,
             to: Vec::new(),
-            message: json!({}),
+            message: serde_json::from_str(s)?,
         }
     }
 
