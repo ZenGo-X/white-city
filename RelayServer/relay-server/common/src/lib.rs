@@ -7,7 +7,7 @@ extern crate byteorder;
 
 use std::vec::Vec;
 use serde::{Serialize, Deserialize};
-use serde_json::*;
+use serde_json::json;
 
 mod codec;
 pub mod protocol;
