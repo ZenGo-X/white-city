@@ -38,16 +38,16 @@ impl RelayMessage {
         }
     }
 
-    pub fn set_message_params<S>(
+    pub fn set_message_params<S: Into<String>>(
         &mut self,
         round_number: u32,
         to: Vec<PeerIdentifier>,
         message: S
-    ) where S: Deserialize + Serialize
+    )
     {
         self.round = round_number;
         self.to = to;
-        self.message = message;
+        self.message = message.into();
     }
 
 //    pub fn set_message_params(
