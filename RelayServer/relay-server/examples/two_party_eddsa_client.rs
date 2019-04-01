@@ -43,7 +43,7 @@ use multi_party_ed25519::protocols::aggsig::{
 };
 
 use relay_server_common::common::*;
-use curv::elliptic::curves::ed25519;
+use curv::elliptic::curves::ed25519::Ed25519Point;
 use dict::{ Dict, DictIface };
 
 // ClientSession holds session data
@@ -63,7 +63,7 @@ impl ProtocolSession {
     pub fn new(protocol_id:ProtocolIdentifier, capacity: u32) -> ProtocolSession {
         ProtocolSession {
             registered: false,
-            peer_id: Refcell::new(0),
+            peer_id: RefCell::new(0),
             protocol_id,
             capacity,
             next_message: None,
@@ -193,7 +193,7 @@ fn main() {
 
                                     // create a mock relay message
                                     let mut client_message= ClientMessage::new();
-                                    let mut relay_message = RelayMessage::new(peer_id, protocol_id);
+                                    let mut relay_message = RelayMessage::new(peer_id, session.protocol_id.clone());
                                     let mut to: Vec<u32> = session.bc_dests.clone();
 
                                     // wait a little so we can spawn the second client
