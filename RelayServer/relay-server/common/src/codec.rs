@@ -15,9 +15,9 @@ pub struct LengthPrefixedJson<'a, In, Out>
     _out: PhantomData<Out>,
 }
 
-impl<In, Out> LengthPrefixedJson<In, Out>
-    where In: Serialize + Deserialize,
-          Out: Serialize + Deserialize
+impl<'a, In, Out> LengthPrefixedJson<In, Out>
+    where In: Serialize + Deserialize<'a>,
+          Out: Serialize + Deserialize<'a>
 {
     pub fn new() -> LengthPrefixedJson<In, Out> {
         LengthPrefixedJson {
@@ -30,9 +30,9 @@ impl<In, Out> LengthPrefixedJson<In, Out>
 // `LengthPrefixedJson` is a codec for sending and receiving serde_json serializable types. The
 // over the wire format is a Big Endian u16 indicating the number of bytes in the JSON payload
 // (not including the 2 u16 bytes themselves) followed by the JSON payload.
-impl<In, Out> Codec for LengthPrefixedJson<In, Out>
-    where In: Serialize + Deserialize,
-          Out: Serialize + Deserialize
+impl<'a, In, Out> Codec for LengthPrefixedJson<In, Out>
+    where In: Serialize + Deserialize<'a>,
+          Out: Serialize + Deserialize<'a>
 {
     type In = In;
     type Out = Out;
