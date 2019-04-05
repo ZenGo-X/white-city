@@ -207,10 +207,7 @@ fn main() {
                                     //session.next_message = Some(client_message);
                                     return Ok(client_message);
                                 },
-                                ServerResponse::ErrorResponse(err_msg) =>{
-                                    println!("got error response");
-                                    return Ok(ClientMessage::new());
-                                },
+                                ServerResponse::ErrorResponse(err_msg) => println!("got error response"),
                                 _ => panic!("failed to register")
                             }
                         }
