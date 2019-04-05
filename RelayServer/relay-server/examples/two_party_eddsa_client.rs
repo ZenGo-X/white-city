@@ -163,10 +163,12 @@ fn main() {
         let mut msg = ClientMessage::new();
         let register_msg = msg.register(session.protocol_id.clone(), session.capacity.clone());
 
-        let mut session = session.clone();
+        //let mut session = session.clone();
         // send register message to server
-        framed_stream.send(msg)
-            .and_then(|stream| {
+	let send_ = framed_stream.send(msg);
+	//let session = session.clone();
+            send_.and_then(|stream| {
+		//let session = session.clone();
                 let (tx, rx) = stream.split();
                 let client = rx.and_then(|msg| {
                     println!("Got message from server: {:?}", msg);
