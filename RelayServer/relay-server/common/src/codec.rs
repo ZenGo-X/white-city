@@ -7,17 +7,17 @@ use std::io;
 use std::marker::PhantomData;
 use std::mem;
 
-pub struct LengthPrefixedJson<'a, In, Out>
-    where In: Serialize + Deserialize<'a>,
-          Out: Serialize + Deserialize<'a>
+pub struct LengthPrefixedJson<In, Out>
+    where In: Serialize + Deserialize,//<'a>,
+          Out: Serialize + Deserialize//<'a>
 {
     _in: PhantomData<In>,
     _out: PhantomData<Out>,
 }
 
-impl<'a, In, Out> LengthPrefixedJson<In, Out>
-    where In: Serialize + Deserialize<'a>,
-          Out: Serialize + Deserialize<'a>
+impl<In, Out> LengthPrefixedJson<In, Out>
+    where In: Serialize + Deserialize,//<'a>,
+          Out: Segrialize + Deserialize//<'a>
 {
     pub fn new() -> LengthPrefixedJson<In, Out> {
         LengthPrefixedJson {
@@ -30,9 +30,9 @@ impl<'a, In, Out> LengthPrefixedJson<In, Out>
 // `LengthPrefixedJson` is a codec for sending and receiving serde_json serializable types. The
 // over the wire format is a Big Endian u16 indicating the number of bytes in the JSON payload
 // (not including the 2 u16 bytes themselves) followed by the JSON payload.
-impl<'a, In, Out> Codec for LengthPrefixedJson<In, Out>
-    where In: Serialize + Deserialize<'a>,
-          Out: Serialize + Deserialize<'a>
+impl<In, Out> Codec for LengthPrefixedJson< In, Out>
+    where In: Serialize + Deserialize,//<'a>,
+          Out: Serialize + Deserialize//<'a>
 {
     type In = In;
     type Out = Out;

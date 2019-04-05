@@ -15,4 +15,5 @@ dict = "0.1.5"
 relay-server-common = { path = "../relay-server/common" }
 
 multi-party-ed25519 = { git = "https://github.com/KZen-networks/multi-party-eddsa" }
+
 curv = { git = "https://github.com/KZen-networks/curv"}

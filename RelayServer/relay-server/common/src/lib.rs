@@ -174,8 +174,8 @@ struct RegisterResponse {
 }
 
 // in: clientMessage out:serverMessage
-pub type ServerToClientCodec = codec::LengthPrefixedJson<ClientMessage, ServerMessage>;
-pub type ClientToServerCodec = codec::LengthPrefixedJson<ServerMessage, ClientMessage>;
+pub type ServerToClientCodec= codec::LengthPrefixedJson<'static, ClientMessage, ServerMessage>;
+pub type ClientToServerCodec = codec::LengthPrefixedJson<'static, ServerMessage, ClientMessage>;
 
 
 // codec for register message
