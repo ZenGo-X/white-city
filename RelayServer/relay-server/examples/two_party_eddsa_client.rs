@@ -56,6 +56,7 @@ struct ProtocolSession {
     pub capacity: u32,
     pub next_message: Option<ClientMessage>,
     pub bc_dests: Vec<ProtocolIdentifier>,
+    pub step: u32,
     //pub  protocol_data: ProtocolData,
 }
 
@@ -70,6 +71,7 @@ impl ProtocolSession {
             next_message: None,
             bc_dests: (1..(capacity+1)).collect(),
             //protocol_data: ProtocolData::new(),
+            step: 0,
         }
     }
 
@@ -77,26 +79,13 @@ impl ProtocolSession {
         let index = self.peer_id.clone().into_inner() - 1;
         self.bc_dests.remove(index as usize);
     }
+
+    pub fn next_step(&mut self) {
+        let step = self.clone().step + 1;
+        self.step = step + 1;
+    }
 }
 
-//struct ProtocolData{
-//    pub peer_data: Dict<PeerData>,
-//}
-
-//#[derive(Default, Debug, Clone)]
-//struct PeerData{
-//    pub commitment: BigInt, // commitment
-//    pub key: Option<EphemeralKey>, // key
-//    pub sig: Option<Signature>, // k + r
-//}
-
-//impl ProtocolData{
-//    pub fn new() -> ProtocolData {
-//        ProtocolData{
-//            peer_data:Dict::<PeerData>::new(),
-//        }
-//    }
-//}
 
 #[derive(Debug)]
 pub enum ServerMessageType { // TODO this is somewhat duplicate
@@ -125,15 +114,63 @@ pub enum MessageProcessResult {
     Abort
 }
 
-fn generate_pk_message(pk: &String) -> String {
+fn generate_pk_message_payload(pk: &String) -> String {
     return format!("{}{}{}", PK_MESSAGE_PREFIX, RELAY_MESSAGE_DELIMITER, pk)
+}
+
+enum RELAY_MESSAGE_TYPE {
+    /// Types of expected relay messages
+    /// for step 0 we expect PUBLIC_KEY_MESSAGE
+    /// for step 1 we expect COMMITMENT
+    /// for step 2 we expect R_MESSAGE
+    /// for step 3 we expect SIGNATURE
+
+    PUBLIC_KEY(String), //  Serialized key
+    COMMITMENT(String), //  Commitment
+    R_MESSAGE(String),  //  R_j of the peer
+    SIGNATURE(String),  //  S_j
+}
+
+struct PeerData{
+    /// data structure that holds the relevant data of the peers.
+    /// In our case:
+    /// pks: all the public keys of the peers
+    /// TODO
+    /// TODO
+    pks: Vec<String>,
+    commitments: Vec<String>,
+    r_s: Vec<String>,
+    sigs: Vec<String>,
+}
+
+fn resolve_relay_message_type(msg: &RelayMessage) -> RELAY_MESSAGE_TYPE {
+    unimplemented!("");
+    let msg_payload = msg.message.clone();
+
+    let split_msg = msg_payload.split(RELAY_MESSAGE_DELIMITER).collect();
+    let msg_prefix = split_msg[0];
+    match msg_prefix {
+        PK_MESSAGE_PREFIX => {
+            return RELAY_MESSAGE_TYPE::PUBLIC_KEY(split_msg[1]);
+        },
+        COMMITMENT_MESSAGE_PREFIX => {
+            unimplemented!()
+        },
+        R_KEY_MESSAGE_PREFIX => {
+            unimplemented!()
+        },
+        SIGNATURE_MESSAGE_PREFIX => {
+            unimplemented!()
+        },
+        _ => panic!("Unknown relay message prefix")
+    }
 }
 
 fn main() {
     // message for signing
     let message: [u8; 4] = [79,77,69,82];
 
-    // TODO take these from ARGV
+
     let PROTOCOL_IDENTIFIER_ARG = 1;
     let PROTOCOL_CAPACITY_ARG = 2 as ProtocolIdentifier;
 
@@ -182,10 +219,11 @@ fn main() {
                                     // Set the session parameters
                                     session.peer_id.replace(peer_id);
                                     session.set_bc_dests();
+                                    session.next_step();
 
                                     //after register, generate signing key
                                     let key = KeyPair::create();
-                                    let pk:Ed25519Point = key.public_key;
+                                    let pk/*:Ed25519Point */= key.public_key;
                                     let message =  serde_json::to_string(&pk).expect("Failed in serialization");key.public_key;
 
 //                                    let (ephemeral_key, sign_first_message, sign_second_message) =
@@ -194,7 +232,7 @@ fn main() {
 //                                    let commitment = &sign_first_message.commitment.clone();
 //                                    println!("sending commitment");
 
-                                    // create a mock relay message
+                                    // create relay message
                                     let mut client_message= ClientMessage::new();
                                     let mut relay_message = RelayMessage::new(peer_id, session.protocol_id.clone());
                                     let mut to: Vec<u32> = session.bc_dests.clone();
@@ -203,23 +241,52 @@ fn main() {
                                     let wait_time = time::Duration::from_millis(5000);
                                     thread::sleep(wait_time);
 
-
-                                    relay_message.set_message_params(0, to, generate_pk_message(&message));
+                                    relay_message.set_message_params(0, to, generate_pk_message_payload(&message));
                                     client_message.relay_message = Some(relay_message.clone());
-                                    //session.next_message = Some(client_message);
                                     return Ok(client_message);
                                 },
                                 ServerResponse::ErrorResponse(err_msg) => {
                                     println!("got error response");
                                     return Ok(ClientMessage::new());
                                 },
+                                ServerResponse::GeneralResponse(msg) => {
+                                    unimplemented!()
+                                },
+                                ServerResponse::NoResponse => {
+                                  unimplemented!()
+                                },
                                 _ => panic!("failed to register")
                             }
                         }
                         ServerMessageType::RelayMessage => {
                             println!("Got new relay message");
-                            println!("{:?}", msg.relay_message.unwrap());
-                            //Ok(MessageProcessResult::NoMessage)
+                            println!("{:?}", );
+                            // parse relay message
+                            // (if we got here this means we are registered and
+                            // the client sent the private key)
+
+                            // so at the first step we are expecting the pks from all other peers
+                            let relay_msg = msg.relay_message.unwrap();
+                            let msg_type = resolve_relay_message_type(&rel);
+                            match msg_type {
+                                // for each type
+                                // check if received data from all peers,
+                                // if so do the next step,
+                                // if not send empty message (means we are still waiting)
+                                RELAY_MESSAGE_TYPE::PUBLIC_KEY(pk) => {
+                                    println!("Got public key: {:}", pk);
+                                },
+                                RELAY_MESSAGE_TYPE::COMMITMENT(t) => {
+                                    unimplemented!()
+                                },
+                                RELAY_MESSAGE_TYPE::R_MESSAGE(r) => {
+                                    unimplemented!()
+                                },
+                                RELAY_MESSAGE_TYPE::SIGNATURE(s) => {
+                                    unimplemented!()
+                                }
+                                _ => panic!("Unknown relay message type")
+                            }
                             Ok(ClientMessage::new())
                         },
                         ServerMessageType::Abort => {
