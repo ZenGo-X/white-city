@@ -38,12 +38,13 @@ use relay_server_common::{
 extern crate multi_party_ed25519;
 extern crate curv;
 
+use curv::elliptic::curves::ed25519::*;
 use multi_party_ed25519::protocols::aggsig::{
     test_com, verify, KeyPair, Signature, EphemeralKey
 };
 
 use relay_server_common::common::*;
-use curv::elliptic::curves::ed25519::Ed25519Point;
+
 use dict::{ Dict, DictIface };
 
 // ClientSession holds session data
@@ -182,7 +183,7 @@ fn main() {
 
                                     //after register, generate signing key
                                     let key = KeyPair::create();
-                                    let pk = key.public_key;
+                                    let pk:Ed25519Point = key.public_key;
                                     let message =  serde_json::to_string(&pk).expect("Failed in serialization");key.public_key;
 
 //                                    let (ephemeral_key, sign_first_message, sign_second_message) =

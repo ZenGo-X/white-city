@@ -7,9 +7,9 @@ use std::io;
 use std::marker::PhantomData;
 use std::mem;
 
-pub struct LengthPrefixedJson<In, Out>
-    where In: Serialize + Deserialize,
-          Out: Serialize + Deserialize
+pub struct LengthPrefixedJson<'a, In, Out>
+    where In: Serialize + Deserialize<'a>,
+          Out: Serialize + Deserialize<'a>
 {
     _in: PhantomData<In>,
     _out: PhantomData<Out>,
