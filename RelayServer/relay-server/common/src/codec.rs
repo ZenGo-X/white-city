@@ -17,7 +17,7 @@ pub struct LengthPrefixedJson<In, Out>
 
 impl<In, Out> LengthPrefixedJson<In, Out>
     where In: Serialize + Deserialize,//<'a>,
-          Out: Segrialize + Deserialize//<'a>
+          Out: Serialize + Deserialize//<'a>
 {
     pub fn new() -> LengthPrefixedJson<In, Out> {
         LengthPrefixedJson {

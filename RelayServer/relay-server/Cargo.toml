@@ -16,4 +16,7 @@ relay-server-common = { path = "../relay-server/common" }
 
 multi-party-ed25519 = { git = "https://github.com/KZen-networks/multi-party-eddsa" }
 
-curv = { git = "https://github.com/KZen-networks/curv"}
+
+[dependencies.curv]
+git = "https://github.com/KZen-networks/curv"
+features=["ec_ed25519"]
