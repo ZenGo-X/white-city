@@ -133,12 +133,12 @@ enum RELAY_MESSAGE_TYPE {
 
 
 struct PeerData{
-    /// data structure that holds the relevant data of the peers.
+    /// data structure that holds the relevant data of the peers, local and remote
     /// In our case:
     /// pks: all the public keys of the peers
     /// TODO
     /// TODO
-    pub pks: Vec<String>,
+    pub pks: Vec<Ed25519Point>,
     pub commitments: Vec<String>,
     pub r_s: Vec<String>,
     pub sigs: Vec<String>,
@@ -156,7 +156,18 @@ impl PeerData {
     }
 }
 
+struct ClientData{
+    /// holds this peers data relevant for the protocol
+    key: KeyPair,
+}
 
+impl ClientData {
+    pub fn new() -> ClientData{
+        ClientData{
+            key: KeyPair::create(),
+        }
+    }
+}
 
 fn resolve_relay_message_type(msg: &RelayMessage) -> RELAY_MESSAGE_TYPE {
     let msg_payload = msg.message.clone();
@@ -207,6 +218,7 @@ fn main() {
 
     let mut session = ProtocolSession::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG);
     let mut peer_data = PeerData::new();
+    let mut client_data = ClientData::new();
 
     let client = _tcp.and_then(|stream| {
         println!("sending register message");
@@ -238,10 +250,10 @@ fn main() {
                                 session.next_step();
 
                                 //after register, generate signing key
-                                let key = KeyPair::create();
-                                let pk/*:Ed25519Point */= key.public_key;
+                                let pk/*:Ed25519Point */= client_data.key.public_key;
+                                peer_data.pks.push(pk);
                                 let message =  serde_json::to_string(&pk).expect("Failed in serialization");key.public_key;
-
+                                //peer_data.pks.push(message);
 //                                    let (ephemeral_key, sign_first_message, sign_second_message) =
 //                                        Signature::create_ephemeral_key_and_commit(&key, &message);
 //
@@ -263,10 +275,20 @@ fn main() {
                             },
                             ServerResponse::ErrorResponse(err_msg) => {
                                 println!("got error response");
+                                match err_msg {
+                                    resp if resp == NOT_YOUR_TURN => {
+                                        println!("not my turn");
+                                        // wait a little so we can spawn the second client
+                                        let wait_time = time::Duration::from_millis(5000);
+                                        thread::sleep(wait_time);
+                                        println!("sending again");
+                                    },
+                                    _ => {}
+                                }
                                 return Ok(ClientMessage::new());
                             },
                             ServerResponse::GeneralResponse(msg) => {
-                                unimplemented!()
+                                unimplementLed!()
                             },
                             ServerResponse::NoResponse => {
                               unimplemented!()
@@ -289,18 +311,25 @@ fn main() {
                             // check if received data from all peers,
                             // if so do the next step,
                             // if not send empty message (means we are still waiting)
+
+                            // TODO move to a managing struct
                             RELAY_MESSAGE_TYPE::PUBLIC_KEY(pk) => {
                                 println!("Got public key: {:}", pk);
+                                let pk = serde_json::from_str(pk).unwrap();
                                 peer_data.pks.push(pk);
+                                if peer_data.pks.len() == session.capacity {
+                                    println!("Got all pks! moving to next step");
+                                }
                             },
                             RELAY_MESSAGE_TYPE::COMMITMENT(t) => {
-                                unimplemented!()
+                                println!("Got commitment");
+                                peer_data.commitments.push(t);
                             },
                             RELAY_MESSAGE_TYPE::R_MESSAGE(r) => {
-                                unimplemented!()
+                                peer_data.r_s.push(r);
                             },
                             RELAY_MESSAGE_TYPE::SIGNATURE(s) => {
-                                unimplemented!()
+                                peer_data.sigs.push(s);
                             }
                             _ => panic!("Unknown relay message type")
                         }

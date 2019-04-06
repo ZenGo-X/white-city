@@ -54,6 +54,8 @@ use relay_server_common::protocol::{
 use relay_server_common::common::{
     RELAY_ERROR_RESPONSE,
     CANT_REGISTER_RESPONSE,
+    STATE_NOT_INITIALIZED,
+    NOT_YOUR_TURN,
 };
 
 
@@ -203,7 +205,7 @@ impl RelaySession{
 
     /// check if this relay message sent from the give SocketAddr
     /// is valid to send to rest of the peers
-    fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> bool{
+    fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str>{
 
         println!("Checking if {:} can relay", msg.peer_number);
         println!("Server state: {:?}", self.state.clone().into_inner());
@@ -215,7 +217,7 @@ impl RelaySession{
             },
             _ => {
                 println!("Relay sessions state is not initialized");
-                return false
+                return Err(STATE_NOT_INITIALIZED);
             },
         }
         // validate the sender in the message (peer_number field) is the peer associated with this address
@@ -227,10 +229,17 @@ impl RelaySession{
         if let Some(p) = peer {
             if p.registered && p.peer_id == sender {
                 // check if it is this peers turn
-                return self.protocol.clone().into_inner().next() == p.peer_id
+                if self.protocol.clone().into_inner().next() == p.peer_id {
+                    return Ok(());
+                } else {
+                    return Err(NOT_YOUR_TURN)
+                }
             }
         }
-        false
+        {
+            return Err("Not A peer");
+        }
+
     }
 
 
@@ -313,22 +322,25 @@ impl RelaySession {
         let mut server_msg = ServerMessage::new();
         let mut _to = vec![];
         let peer_id = self.peers.borrow_mut().get_mut(from).unwrap().peer_id;
-        if self.can_relay(from, &msg) {
-            server_msg.relay_message = Some(msg.clone());
-            _to = msg.to;
-            let sender_index = _to.iter().position(|x| *x == peer_id);
-            if sender_index.is_some(){
-                _to.remove(sender_index.unwrap());
-            }
-            self.protocol.clone().into_inner().advance_turn();
+        let can_relay = self.can_relay(from, &msg);
+        match can_relay {
+            Ok(()) => {
+                server_msg.relay_message = Some(msg.clone());
+                _to = msg.to;
+                let sender_index = _to.iter().position(|x| *x == peer_id);
+                if sender_index.is_some(){
+                    _to.remove(sender_index.unwrap());
+                }
+                self.protocol.clone().into_inner().advance_turn();
 
-            println!("sending relay message: {:?}", server_msg);
-            println!("sending to: {:?}", _to);
-        }
-        else {
-            // send an error response to sender
-            server_msg.response = Some(ServerResponse::ErrorResponse(String::from(RELAY_ERROR_RESPONSE)));
-            _to = vec![peer_id];
+                println!("sending relay message: {:?}", server_msg);
+                println!("sending to: {:?}", _to);
+            },
+            Err(err_msg) => {
+                // send an error response to sender
+                server_msg.response = Some(ServerResponse::ErrorResponse(String::from(err_msg)));
+                _to = vec![peer_id];
+            }
         }
         self.multiple_send(server_msg, &_to)
     }
@@ -346,6 +358,7 @@ impl RelaySession {
 
     /// abort this relay session and send abort message to all peers
     pub fn abort<E: 'static>(&self, addr:SocketAddr) -> Box<Future<Item = (), Error = E>> {
+        println!("Aborting");
         let mut server_msg = ServerMessage::new();
         match self.state.clone().into_inner(){
             RelaySessionState::Initialized => {},
@@ -373,6 +386,7 @@ impl RelaySession {
     /// if it an active peer disconnected - abort the session
     /// otherwise, simply remove the connection of this address from the peers collection
     pub fn connection_closed<E: 'static>(&mut self, addr:SocketAddr) -> Box<Future<Item = (), Error = E>>{
+        println!("connection closed.");
         let mut to= Vec::new();
         self.peers.borrow().values().filter(|p| p.registered).for_each(|p| {
             to.push(p.peer_id);
@@ -394,6 +408,7 @@ impl RelaySession {
             }
         }
         if peer_disconnected {
+            println!("connection closed with a peer. Aborting..");
             let mut server_msg= ServerMessage::new();
             server_msg.abort = Some(AbortMessage::new(peer_id, self.protocol.clone().into_inner().id));
             self.state.replace(RelaySessionState::Aborted);
