@@ -147,11 +147,11 @@ fn resolve_relay_message_type(msg: &RelayMessage) -> RELAY_MESSAGE_TYPE {
     unimplemented!("");
     let msg_payload = msg.message.clone();
 
-    let split_msg = msg_payload.split(RELAY_MESSAGE_DELIMITER).collect();
-    let msg_prefix = split_msg[0];
+    let split_msg:Vec<String> = msg_payload.split(RELAY_MESSAGE_DELIMITER).collect();
+    let msg_prefix = &split_msg[0];
     match msg_prefix {
         PK_MESSAGE_PREFIX => {
-            return RELAY_MESSAGE_TYPE::PUBLIC_KEY(split_msg[1]);
+            return RELAY_MESSAGE_TYPE::PUBLIC_KEY(split_msg[1].clone());
         },
         COMMITMENT_MESSAGE_PREFIX => {
             unimplemented!()
