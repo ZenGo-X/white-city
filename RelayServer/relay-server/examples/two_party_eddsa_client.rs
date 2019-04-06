@@ -151,7 +151,7 @@ fn resolve_relay_message_type(msg: &RelayMessage) -> RELAY_MESSAGE_TYPE {
     let msg_prefix = &split_msg[0];
     match msg_prefix {
         PK_MESSAGE_PREFIX => {
-            return RELAY_MESSAGE_TYPE::PUBLIC_KEY(split_msg[1].clone());
+            return RELAY_MESSAGE_TYPE::PUBLIC_KEY(String::from( split_msg[1].clone()));
         },
         COMMITMENT_MESSAGE_PREFIX => {
             unimplemented!()
