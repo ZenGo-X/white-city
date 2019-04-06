@@ -277,7 +277,7 @@ fn main() {
                     }
                     ServerMessageType::RelayMessage => {
                         println!("Got new relay message");
-                        println!("{:?}", );
+                        println!("{:?}", msg);
                         // parse relay message
                         // (if we got here this means we are registered and
                         // the client sent the private key)
