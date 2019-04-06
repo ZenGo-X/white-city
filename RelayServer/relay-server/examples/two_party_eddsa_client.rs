@@ -252,7 +252,7 @@ fn main() {
                                 //after register, generate signing key
                                 let pk/*:Ed25519Point */= client_data.key.public_key;
                                 peer_data.pks.push(pk);
-                                let message =  serde_json::to_string(&pk).expect("Failed in serialization");key.public_key;
+                                let message =  serde_json::to_string(&pk).expect("Failed in serialization");//key.public_key;
                                 //peer_data.pks.push(message);
 //                                    let (ephemeral_key, sign_first_message, sign_second_message) =
 //                                        Signature::create_ephemeral_key_and_commit(&key, &message);
@@ -288,7 +288,7 @@ fn main() {
                                 return Ok(ClientMessage::new());
                             },
                             ServerResponse::GeneralResponse(msg) => {
-                                unimplementLed!()
+                                unimplemented!()
                             },
                             ServerResponse::NoResponse => {
                               unimplemented!()
