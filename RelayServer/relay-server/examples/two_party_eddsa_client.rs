@@ -315,9 +315,9 @@ fn main() {
                             // TODO move to a managing struct
                             RELAY_MESSAGE_TYPE::PUBLIC_KEY(pk) => {
                                 println!("Got public key: {:}", pk);
-                                let pk = serde_json::from_str(pk).unwrap();
+                                let pk = serde_json::from_str(&pk).unwrap();
                                 peer_data.pks.push(pk);
-                                if peer_data.pks.len() == session.capacity {
+                                if peer_data.pks.len() == session.capacity as usize {
                                     println!("Got all pks! moving to next step");
                                 }
                             },
