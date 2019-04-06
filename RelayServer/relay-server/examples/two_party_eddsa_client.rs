@@ -159,19 +159,18 @@ impl PeerData {
 
 
 fn resolve_relay_message_type(msg: &RelayMessage) -> RELAY_MESSAGE_TYPE {
-    unimplemented!("");
     let msg_payload = msg.message.clone();
 
     let split_msg:Vec<&str> = msg_payload.split(RELAY_MESSAGE_DELIMITER).collect();
     let msg_prefix = split_msg[0];
     let msg_payload = String::from( split_msg[1].clone());
     match msg_prefix {
+
         pk_prefix if pk_prefix == String::from(PK_MESSAGE_PREFIX)=> {
             return RELAY_MESSAGE_TYPE::PUBLIC_KEY(msg_payload);
         },
-        cmtnmt if cmtnmt == String::from(COMMITMENT_MESSAGE_PREFIX) => {
+        cmtmnt if cmtmnt == String::from(COMMITMENT_MESSAGE_PREFIX) => {
             return RELAY_MESSAGE_TYPE::COMMITMENT(msg_payload);
-            unimplemented!()
         },
         r if r == String::from(R_KEY_MESSAGE_PREFIX ) => {
             return RELAY_MESSAGE_TYPE::R_MESSAGE(msg_payload);
