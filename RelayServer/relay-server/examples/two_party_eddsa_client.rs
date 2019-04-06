@@ -147,7 +147,7 @@ fn resolve_relay_message_type(msg: &RelayMessage) -> RELAY_MESSAGE_TYPE {
     unimplemented!("");
     let msg_payload = msg.message.clone();
 
-    let split_msg:Vec<String> = msg_payload.split(RELAY_MESSAGE_DELIMITER).collect();
+    let split_msg:Vec<&str> = msg_payload.split(RELAY_MESSAGE_DELIMITER).collect();
     let msg_prefix = &split_msg[0];
     match msg_prefix {
         PK_MESSAGE_PREFIX => {
