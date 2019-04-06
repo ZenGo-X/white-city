@@ -166,18 +166,18 @@ fn resolve_relay_message_type(msg: &RelayMessage) -> RELAY_MESSAGE_TYPE {
     let msg_prefix = split_msg[0];
     let msg_payload = String::from( split_msg[1].clone());
     match msg_prefix {
-        String::from(PK_MESSAGE_PREFIX)=> {
+        pk_prefix if pk_prefix == String::from(PK_MESSAGE_PREFIX)=> {
             return RELAY_MESSAGE_TYPE::PUBLIC_KEY(msg_payload);
         },
-        String::from(COMMITMENT_MESSAGE_PREFIX) => {
+        cmtnmt if cmtnmt == String::from(COMMITMENT_MESSAGE_PREFIX) => {
             return RELAY_MESSAGE_TYPE::COMMITMENT(msg_payload);
             unimplemented!()
         },
-        String::from(R_KEY_MESSAGE_PREFIX ) => {
+        r if r == String::from(R_KEY_MESSAGE_PREFIX ) => {
             return RELAY_MESSAGE_TYPE::R_MESSAGE(msg_payload);
 
         },
-        String::from(SIGNATURE_MESSAGE_PREFIX)=> {
+        sig if sig == String::from(SIGNATURE_MESSAGE_PREFIX)=> {
             return RELAY_MESSAGE_TYPE::SIGNATURE(msg_payload);
         },
         _ => panic!("Unknown relay message prefix")
@@ -284,7 +284,7 @@ fn main() {
 
                         // so at the first step we are expecting the pks from all other peers
                         let relay_msg = msg.relay_message.unwrap();
-                        let msg_type = resolve_relay_message_type(&rel);
+                        let msg_type = resolve_relay_message_type(&relay_msg);
                         match msg_type {
                             // for each type
                             // check if received data from all peers,
