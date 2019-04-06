@@ -275,7 +275,8 @@ fn main() {
                             },
                             ServerResponse::ErrorResponse(err_msg) => {
                                 println!("got error response");
-                                match err_msg {
+				let _err_msg:&str = &err_msg;
+                                match _err_msg {
                                     resp if resp == String::from(NOT_YOUR_TURN) => {
                                         println!("not my turn");
                                         // wait a little so we can spawn the second client
