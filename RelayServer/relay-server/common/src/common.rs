@@ -14,7 +14,7 @@ pub static R_KEY_MESSAGE_PREFIX:&str = "R_KEY";
 pub static R_KEY_MESSAGE_DELIMITER:&str = "@";
 pub static SIGNATURE_MESSAGE_PREFIX:&str = "SIGNATURE";
 
-pub static EMPTY_MESSAGE_PAYLOAD: MessagePayload = String::from("");
+pub static EMPTY_MESSAGE_PAYLOAD:&str = "";
 
 pub fn generate_pk_message_payload(pk: &String) -> MessagePayload {
     return format!("{}{}{}", PK_MESSAGE_PREFIX, RELAY_MESSAGE_DELIMITER, pk.clone())
