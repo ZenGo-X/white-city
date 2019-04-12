@@ -24,7 +24,7 @@ pub fn generate_commitment_message_payload(cmtnmt: &String) -> MessagePayload{
     return format!("{prefix}{delimiter}{message}",
                     prefix=COMMITMENT_MESSAGE_PREFIX,
                     delimiter=RELAY_MESSAGE_DELIMITER,
-                    cmtnmt.clone());
+                   message=cmtnmt.clone());
 }
 
 pub fn generate_R_message_payload(r: &String) -> MessagePayload {
