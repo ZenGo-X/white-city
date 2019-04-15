@@ -52,10 +52,10 @@ use relay_server_common::common::*;
 use dict::{ Dict, DictIface };
 use std::collections::HashMap;
 
-#[derive(Default, Debug)]
+//#[derive(Debug)]
 struct DataHolder{
-    pub peer_id: Refcell<PeerIdentifier>,
-    pub client_key: KeyPair,
+    pub peer_id: RefCell<PeerIdentifier>,
+    pub client_key: Option<KeyPair>,
     pub pks: HashMap<PeerIdentifier, Ed25519Point>,
     pub commitments: HashMap<PeerIdentifier, String>,
     pub r_s: HashMap<PeerIdentifier, String>,
@@ -66,24 +66,24 @@ struct DataHolder{
 }
 
 impl DataHolder{
-    pub fn new(capacity: u32, _message: &[u8]) -> DataHolder{
+    pub fn new(capacity: u32, _message: &'static[u8]) -> DataHolder{
         DataHolder {
             client_key: None,
             pks: HashMap::new(),
-            commitments: Vec::new(),
+            commitments: HashMap::new(),
             r_s: HashMap::new(),
             sigs: HashMap::new(),
             capacity,
             message: _message,
-            peer_id: Refcell::new(0),
+            peer_id: RefCell::new(0),
             agg_key: None,
         }
     }
 
     pub fn zero_step(&mut self, peer_id:PeerIdentifier) -> Option<MessagePayload> {
         self.peer_id.replace(peer_id);
-        self.client_key = KeyPair::create();
-        let pk/*:Ed25519Point */= self.client_key.public_key;
+        self.client_key = Some(KeyPair::create());
+        let pk/*:Ed25519Point */= self.client_key.unwrap().public_key.clone();
         self.add_pk(peer_id, pk);
 
 
@@ -175,8 +175,6 @@ impl DataHolder{
         }
     }
 
-    // TODO add a do step method to encapsulate
-    /// validators to check if we finished a step
     pub fn is_done_step_0(&self) -> bool{
         self.pks.len() == self.capacity as usize
     }
@@ -193,11 +191,11 @@ impl DataHolder{
     /// steps - in each step the client does a calculation on its
     /// data, and updates the data holder with the new data
     pub fn step_1(&mut self) -> Option<MessagePayload>{
-        /// each peer computes its commitment to the ephemeral key
-        /// (this implicitly means each party also calculates ephemeral key
-        /// on this step)
+        // each peer computes its commitment to the ephemeral key
+        // (this implicitly means each party also calculates ephemeral key
+        // on this step)
         // round 1: send commitments to ephemeral public keys
-        (ephemeral_key, sign_first_message, sign_second_message) =
+        let (ephemeral_key, sign_first_message, sign_second_message) =
             Signature::create_ephemeral_key_and_commit(&self.client_key, &self.message);
 
         let commitment = sign_first_message.commitment;
@@ -220,13 +218,13 @@ impl DataHolder{
         return Some(generate_R_message_payload(&r));
 
     }
+/// step 3 - after validating all commitments:
+/// 1. compute APK
+/// 2. compute R' = sum(Ri)
+/// 3. sign message
+/// 4. generate (and return) signature message payload
     pub fn step_3(&mut self) -> Option<MessagePayload>{
-        /// step 3 - after validating all commitments,
 
-        /// 1. compute APK
-        /// 2. compute R' = sum(Ri)
-        /// 3. sign message
-        /// 4. generate (and return) signature message payload
         if !self.validate_commitments() {
             // commitments sent by others are not valid. exit
             panic!("Commitments not valid!")
@@ -237,7 +235,7 @@ impl DataHolder{
         let apk = self.agg_key.unwrap_or_else(panic!("Didn't compute apk!"));
 
 
-        let k = Signature::k(&R_tot, &party1_key_agg.apk, &message);
+        let k = Signature::k(&R_tot, &self.agg_key.apk, &self.message);
         let r = self.r_s.get(self.peer_id).unwrap_or_else(panic!("Client has No R ")).clone();
         let _r = serde_json::from_str(&r);
         let key = &self.client_key;
@@ -369,12 +367,12 @@ struct ProtocolDataManager{
 impl ProtocolDataManager{
     pub fn new(capacity: u32, message:&[u8]) -> ProtocolDataManager{
         ProtocolDataManager {
-            peer_id: Refcell::new(0),
+            peer_id: RefCell::new(0),
             current_step: 0,
             capacity,
             data_holder: DataHolder::new(capacity, message),
             client_data: None,
-            new_client_data: False,
+            new_client_data: false,
             //message: message.clone(),
         }
     }
@@ -471,14 +469,14 @@ impl ProtocolSession {
 
     }
 
-    pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
+    pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Result<ClientMessage, ()> {
         let msg_type = resolve_server_msg_type(msg.clone());
         match msg_type {
             ServerMessageType::Response =>{
                 let next =self.handle_server_response(&msg);
                 match next {
                     Ok(next_msg) => return Some(next_msg),
-                    Err => panic!("Error in handle_server_response"),
+                    Err(e) => panic!("Error in handle_server_response"),
                 }
             },
             ServerMessageType::RelayMessage => {
@@ -487,7 +485,7 @@ impl ProtocolSession {
                 let next = self.handle_relay_message(msg.clone());
                 match next {
                     Ok(next_msg) => return Some(next_msg),
-                    Err => panic!("Error in handle_relay_message"),
+                    Err(e) => panic!("Error in handle_relay_message"),
                 }
             },
             ServerMessageType::Abort => {
@@ -501,19 +499,19 @@ impl ProtocolSession {
             }
         }
     }
-
+//TODO rename to successful 
     fn handle_register_response(&mut self, peer_id: PeerIdentifier) ->Result<ClientMessage, ()>{
         println!("Peer identifier: {}",peer_id);
         // Set the session parameters
-        session.peer_id.replace(peer_id);
-        session.set_bc_dests();
+//        self.peer_id.replace(peer_id);
+        self.set_bc_dests();
 
 
         let message =  self.data_manager.initialize(peer_id);
 
         // create relay message
         let mut client_message = ClientMessage::new();
-        let mut relay_message = RelayMessage::new(self.peer_id.clone().into_inner(), self.protocol_id.clone());
+        let mut relay_message = RelayMessage::new(self.data_manager.peer_id.clone().into_inner(), self.protocol_id.clone());
         let mut to: Vec<u32> = self.bc_dests.clone();
 
         // wait a little so we can spawn the other clients
@@ -554,10 +552,10 @@ impl ProtocolSession {
                 },
                 ServerResponse::ErrorResponse(err_msg) => {
                     println!("got error response");
-                    let msg = self.handle_error_reponse(err_msg);
+                    let msg = self.handle_error_response(err_msg);
                     match msg {
                         Ok(_msg) => return Ok(_msg),
-                        Err() => return Ok(ClientMessage::new()),
+                        Err(e) => return Ok(ClientMessage::new()),
                     }
                 },
                 ServerResponse::GeneralResponse(msg) => {
@@ -647,7 +645,7 @@ fn main() {
 
         // prepare register message
         let mut msg = ClientMessage::new();
-        let register_msg = msg.register(session.protocol_id.clone(), session.capacity.clone());
+	msg.register(session.protocol_id.clone(), session.data_manager.capacity.clone());
 
         // send register message to server
         let send_ = framed_stream.send(msg);
