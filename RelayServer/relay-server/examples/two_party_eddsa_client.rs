@@ -440,7 +440,7 @@ impl<T: Peer> ProtocolDataManager<T>{
 
 // ClientSession holds session data
 #[derive(Default, Debug, Clone)]
-struct ProtocolSession<T> {
+struct ProtocolSession<T> where T: Peer{
     pub registered: bool,
     pub protocol_id: ProtocolIdentifier,
     pub data_manager: ProtocolDataManager<T>,
@@ -515,7 +515,7 @@ impl<T: Peer> ProtocolSession<T> {
 
     pub fn generate_register_message(&mut self) -> ClientMessage{
         let mut msg = ClientMessage::new();
-        msg.register(session.protocol_id.clone(), session.data_manager.capacity.clone());
+        msg.register(self.protocol_id.clone(), self.data_manager.capacity.clone());
         msg
     }
 
