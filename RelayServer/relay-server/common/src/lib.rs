@@ -45,7 +45,7 @@ impl RelayMessage {
         message: S
     )
     {
-        self.round = round_number;
+        //self.round = round_number;
         self.to = to;
         self.message = message.into();
     }
