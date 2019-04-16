@@ -203,7 +203,7 @@ impl RelaySession{
     }
 
 
-    /// check if this relay message sent from the give SocketAddr
+    /// check if this relay message sent from the given SocketAddr
     /// is valid to send to rest of the peers
     fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str>{
 

@@ -21,7 +21,7 @@ pub type MessagePayload = String;
 pub struct RelayMessage {
     pub peer_number: PeerIdentifier, // from
     pub protocol_id: ProtocolIdentifier,
-    pub round: u32,
+    //pub round: u32,
     pub to: Vec<PeerIdentifier>,
     pub message: MessagePayload
 }
@@ -32,7 +32,7 @@ impl RelayMessage {
         RelayMessage {
             peer_number,
             protocol_id,
-            round: 0,
+        //    round: 0,
             to: Vec::new(),
             message: String::from(""),
         }
@@ -40,7 +40,7 @@ impl RelayMessage {
 
     pub fn set_message_params<S: Into<String>>(
         &mut self,
-        round_number: u32,
+      //  round_number: u32,
         to: Vec<PeerIdentifier>,
         message: S
     )
@@ -49,18 +49,6 @@ impl RelayMessage {
         self.to = to;
         self.message = message.into();
     }
-
-//    pub fn set_message_params(
-//        &mut self,
-//        round_number: u32,
-//        to: Vec<PeerIdentifier>,
-//        message: serde_json::Value
-//    )
-//    {
-//        self.round = round_number;
-//        self.to = to;
-//        self.message = message;
-//    }
 
 
 }

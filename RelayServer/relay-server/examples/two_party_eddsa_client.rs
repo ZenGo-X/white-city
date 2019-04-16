@@ -53,7 +53,7 @@ use dict::{ Dict, DictIface };
 use std::collections::HashMap;
 
 //#[derive(Debug)]
-struct DataHolder{
+struct EddsaPeer{
     pub peer_id: RefCell<PeerIdentifier>,
     pub client_key: Option<KeyPair>,
     pub pks: HashMap<PeerIdentifier, Ed25519Point>,
@@ -62,227 +62,22 @@ struct DataHolder{
     pub sigs: HashMap<PeerIdentifier, String>,
     pub capacity: u32,
     pub message: &'static[u8],
-    pub agg_key: Option<KeyAgg>
+    pub agg_key: Option<KeyAgg>,
+    //pub current_step: u32,
 }
 
-impl DataHolder{
-    pub fn new(capacity: u32, _message: &'static[u8]) -> DataHolder{
-        DataHolder {
-            client_key: None,
-            pks: HashMap::new(),
-            commitments: HashMap::new(),
-            r_s: HashMap::new(),
-            sigs: HashMap::new(),
-            capacity,
-            message: _message,
-            peer_id: RefCell::new(0),
-            agg_key: None,
-        }
-    }
-
-    pub fn zero_step(&mut self, peer_id:PeerIdentifier) -> Option<MessagePayload> {
-        self.peer_id.replace(peer_id);
-        self.client_key = Some(KeyPair::create());
-        let pk/*:Ed25519Point */= self.client_key.unwrap().public_key.clone();
-        self.add_pk(peer_id, pk);
-
-
-        let pk/*:Ed25519Point */= self.client_data.key.public_key;
-        let pk_s = serde_json::to_string(&pk).expect("Failed in serialization");
-        return Some(generate_pk_message_payload(&pk_s));
-    }
-
-    pub fn add_pk(&mut self, peer_id: PeerIdentifier, pk: Ed25519Point){
+impl EddsaPeer{
+    fn add_pk(&mut self, peer_id: PeerIdentifier, pk: Ed25519Point){
         self.pks.insert(peer_id, pk);
     }
-
-    pub fn add_commitment(&mut self, peer_id: PeerIdentifier, commitment: String){self.commitments.insert(peer_id, commitment);/*TODO*/}
-    pub fn add_r(&mut self, peer_id: PeerIdentifier, r:String){
+    fn add_commitment(&mut self, peer_id: PeerIdentifier, commitment: String){self.commitments.insert(peer_id, commitment);/*TODO*/}
+    fn add_r(&mut self, peer_id: PeerIdentifier, r:String){
         //let v = (r,blind_factor);
         self.r_s.insert(peer_id, r);
     }
-    pub fn add_sig(&mut self, peer_id: PeerIdentifier, sig: String){
+    fn add_sig(&mut self, peer_id: PeerIdentifier, sig: String){
         self.sigs.insert(peer_id, sig);
     }
-
-    pub fn do_step(&mut self) {
-        if self.is_step_done() {
-            // do the next step
-            self.current_step += 1;
-            match self.current_step {
-                1 => self.client_data = self.data_holder.step_1(),
-                2 => self.client_data = self.data_holder.step_2(),
-                3 => self.client_data = self.data_holder.step_3(),
-                _=>panic!("Unsupported step")
-            }
-        }
-    }
-    fn is_step_done(&mut self) -> bool {
-        match self.current_step {
-            0 => return self.is_done_step_0(),//from, payload), // in step 0 we move immediately to step 1
-            1 => return self.is_done_step_1(),//from, payload),
-            2 => return self.is_done_step_2(),//from, payload),
-            3 => return self.is_done_step_3(),//from, payload),
-            _=>panic!("Unsupported step")
-        }
-    }
-}
-impl DataHolder{
-
-    /// data updaters for each step
-    pub fn update_data_step_0(&mut self, from: PeerIdentifier, payload: MessagePayload){
-        let payload_type = self.resolve_payload_type(&payload);
-        match payload_type {
-            MessagePayloadType ::PUBLIC_KEY(pk) => {
-                let s_slice: &str = &pk[..];  // take a full slice of the string
-                let _pk = serde_json::from_str( s_slice);
-                match _pk {
-                    Ok(_pk) => self.add_pk(from,_pk),
-                    Err(e) => panic!("Could not serialize public key")
-                }
-            },
-            _ => panic!("expected public key message")
-        }
-    }
-
-    pub fn update_data_step_1(&mut self, from: PeerIdentifier, payload: MessagePayload){
-        let payload_type = self.resolve_payload_type(&payload);
-        match payload_type {
-            MessagePayloadType ::COMMITMENT(t)  => {
-                self.add_commitment(from, t);
-            },
-            _ => panic!("expected commitment message")
-        }
-    }
-
-    pub fn update_data_step_2(&mut self, from: PeerIdentifier, payload: MessagePayload){
-        let payload_type = self.resolve_payload_type(&payload);
-        match payload_type {
-            MessagePayloadType ::R_MESSAGE(r) => {
-                self.add_r(from, r);
-            },
-            _ => panic!("expected R message")
-        }
-    }
-
-    pub fn update_data_step_3(&mut self, from: PeerIdentifier, payload: MessagePayload){
-        let payload_type = self.resolve_payload_type(&payload);
-        match payload_type {
-            MessagePayloadType ::SIGNATURE(s) => {
-                self.add_signature(from, s);
-            },
-            _ => panic!("expected signature message")
-        }
-    }
-
-    pub fn is_done_step_0(&self) -> bool{
-        self.pks.len() == self.capacity as usize
-    }
-    pub fn is_done_step_1(&self) -> bool{
-        self.commitments.len() == self.capacity as usize
-    }
-    pub fn is_done_step_2(&self) -> bool{
-        self.r_s.len() == self.capacity as usize
-    }
-    pub fn is_done_step_3(&self) -> bool{
-        self.sigs.len() == self.capacity as usize
-    }
-
-    /// steps - in each step the client does a calculation on its
-    /// data, and updates the data holder with the new data
-    pub fn step_1(&mut self) -> Option<MessagePayload>{
-        // each peer computes its commitment to the ephemeral key
-        // (this implicitly means each party also calculates ephemeral key
-        // on this step)
-        // round 1: send commitments to ephemeral public keys
-        let (ephemeral_key, sign_first_message, sign_second_message) =
-            Signature::create_ephemeral_key_and_commit(&self.client_key, &self.message);
-
-        let commitment = sign_first_message.commitment;
-        // save the commitment
-        match serde_json::to_string(commitment){
-            Ok(json_string) =>{
-                self.add_commitment(self.peer_id.clone().into_inner(), json_string.clone());
-                let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
-                //let blind_factor = serde_json::to_string(&sign_second_message.blind_factor).expect("Couldn't serialize blind factor");
-                self.add_r(self.peer_id.clone().into_inner(), r);
-                return Some(generate_commitment_message_payload((&json_string)));
-            } ,
-            Err(e) => panic!("Couldn't serialize commitment")
-        }
-    }
-    pub fn step_2(&mut self) -> Option<MessagePayload>{
-        /// step 2 - return the clients R. No extra calculations
-        let r = self.r_s.get(self.peer_id.clone().into_inner()).unwrap_or_else(panic!("Didnt compute R"));
-        //let msg_payload =
-        return Some(generate_R_message_payload(&r));
-
-    }
-/// step 3 - after validating all commitments:
-/// 1. compute APK
-/// 2. compute R' = sum(Ri)
-/// 3. sign message
-/// 4. generate (and return) signature message payload
-    pub fn step_3(&mut self) -> Option<MessagePayload>{
-
-        if !self.validate_commitments() {
-            // commitments sent by others are not valid. exit
-            panic!("Commitments not valid!")
-        }
-        self.aggregate_pks();
-        self.compute_r_tot();
-        let R_tot = self.R_tot.unwrap_or_else(panic!("Didn't compute R_tot!"));
-        let apk = self.agg_key.unwrap_or_else(panic!("Didn't compute apk!"));
-
-
-        let k = Signature::k(&R_tot, &self.agg_key.apk, &self.message);
-        let r = self.r_s.get(self.peer_id).unwrap_or_else(panic!("Client has No R ")).clone();
-        let _r = serde_json::from_str(&r);
-        let key = &self.client_key;
-        // sign
-        let s = Signature::partial_sign(&_r,&key,&k,&apk.hash,&R_tot);
-        let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
-
-        Some(generate_signature_message_payload(&sig_string))
-    }
-
-    /// check that the protocol is done
-    /// and that this peer can finalize its calculations
-    fn is_done(&mut self) -> bool {
-        self.is_done_step_3()
-    }
-
-    /// Check if peer should finalize the session
-    pub fn should_finalize(&mut self)->bool{
-        self.is_done()
-    }
-
-    /// Does the final calculation of the protocol
-    /// in this case:
-    ///     collection all signatures
-    ///     and verifying the message
-    pub fn finalize(&mut self) -> Result<(),&'static str> {
-        if !self.is_done(){
-            return Err("not done")
-        }
-        // collect signatures
-        let mut s: Vec<Signature> = Vec::new();
-        for (peer_id, sig) in self.sigs {
-            let signature = serde_json::from_str(&sig).expect("Could not serialize signature!");
-            s.push(signature)
-        }
-        let signature = Signature::add_signature_parts(s);
-
-        // verify message with signature
-        let apk = self.agg_key.unwrap();
-        if verify(&signature,&self.message, &apk.apk){
-            Ok(())
-        } else {
-            Err("failed to verify message with aggregated signature")
-        }
-
-    }
-
     fn compute_r_tot(&mut self) {
         let mut Ri:Vec<GE> = Vec::new();
         for (peer_id, (r, blind)) in self.r_s {
@@ -292,17 +87,16 @@ impl DataHolder{
         let r_tot= Signature::get_R_tot(Ri);
         self.R_tot = Some(r_tot);
     }
-
     fn aggregate_pks(&mut self) {
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for (peer, pk) in self.pks {
             pks[peer - 1] = pk;
         }
-        let agg_key= KeyPair::key_aggregation_n(&pks, self.peer_id - 1);
+        let peer_id = self.peer_id.clone().into_inner();
+        let index = (peer_id - 1) as usize;
+        let agg_key= KeyPair::key_aggregation_n(&pks, &index);
         self.agg_key = Some(agg_key);
-
     }
-
     fn validate_commitments(&mut self) -> bool{
         // iterate over all peer Rs
         for (peer_id, r) in self.r_s {
@@ -311,7 +105,7 @@ impl DataHolder{
 
             // get the corresponding commitment
             let k = self.peer_id.clone().into_inner();
-            let cmtmnt = self.commitments.get(k)
+            let cmtmnt = self.commitments.get(&k)
                 .expect("peer didn't send commitment");
             let commitment = serde_json::from_str(cmtmnt).unwrap();
             // if we couldn't validate the commitment - failure
@@ -327,7 +121,148 @@ impl DataHolder{
     }
 }
 
-impl DataHolder{
+impl EddsaPeer {
+    /// data updaters for each step
+    pub fn update_data_step_0(&mut self, from: PeerIdentifier, payload: MessagePayload) {
+        let payload_type = self.resolve_payload_type(&payload);
+        match payload_type {
+            MessagePayloadType::PUBLIC_KEY(pk) => {
+                let s_slice: &str = &pk[..];  // take a full slice of the string
+                let _pk = serde_json::from_str(s_slice);
+                match _pk {
+                    Ok(_pk) => self.add_pk(from, _pk),
+                    Err(e) => panic!("Could not serialize public key")
+                }
+            },
+            _ => panic!("expected public key message")
+        }
+    }
+
+    pub fn update_data_step_1(&mut self, from: PeerIdentifier, payload: MessagePayload) {
+        let payload_type = self.resolve_payload_type(&payload);
+        match payload_type {
+            MessagePayloadType::COMMITMENT(t) => {
+                self.add_commitment(from, t);
+            },
+            _ => panic!("expected commitment message")
+        }
+    }
+
+    pub fn update_data_step_2(&mut self, from: PeerIdentifier, payload: MessagePayload) {
+        let payload_type = self.resolve_payload_type(&payload);
+        match payload_type {
+            MessagePayloadType::R_MESSAGE(r) => {
+                self.add_r(from, r);
+            },
+            _ => panic!("expected R message")
+        }
+    }
+
+    pub fn update_data_step_3(&mut self, from: PeerIdentifier, payload: MessagePayload) {
+        let payload_type = self.resolve_payload_type(&payload);
+        match payload_type {
+            MessagePayloadType::SIGNATURE(s) => {
+                self.add_sig(from, s);
+            },
+            _ => panic!("expected signature message")
+        }
+    }
+}
+
+impl EddsaPeer {
+    fn is_step_done(&mut self) -> bool {
+        match self.current_step {
+            0 => return self.is_done_step_0(),//from, payload), // in step 0 we move immediately to step 1
+            1 => return self.is_done_step_1(),//from, payload),
+            2 => return self.is_done_step_2(),//from, payload),
+            3 => return self.is_done_step_3(),//from, payload),
+            _ => panic!("Unsupported step")
+        }
+    }
+    pub fn is_done_step_0(&self) -> bool {
+        self.pks.len() == self.capacity as usize
+    }
+    pub fn is_done_step_1(&self) -> bool {
+        self.commitments.len() == self.capacity as usize
+    }
+    pub fn is_done_step_2(&self) -> bool {
+        self.r_s.len() == self.capacity as usize
+    }
+    pub fn is_done_step_3(&self) -> bool {
+        self.sigs.len() == self.capacity as usize
+    }
+    /// Check if peer should finalize the session
+    pub fn should_finalize(&mut self)->bool{
+        self.is_done()
+    }
+}
+impl EddsaPeer{
+    /// steps - in each step the client does a calculation on its
+    /// data, and updates the data holder with the new data
+    pub fn step_1(&mut self) -> MessagePayload{
+        // each peer computes its commitment to the ephemeral key
+        // (this implicitly means each party also calculates ephemeral key
+        // on this step)
+        // round 1: send commitments to ephemeral public keys
+        let k = self.client_key.unwrap_or_else(panic!("No client key"));
+        let (ephemeral_key, sign_first_message, sign_second_message) =
+            Signature::create_ephemeral_key_and_commit(&k, &self.message);
+
+        let commitment = sign_first_message.commitment;
+        // save the commitment
+        match serde_json::to_string(commitment){
+            Ok(json_string) =>{
+                self.add_commitment(self.peer_id.clone().into_inner(), json_string.clone());
+                let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
+                //let blind_factor = serde_json::to_string(&sign_second_message.blind_factor).expect("Couldn't serialize blind factor");
+                self.add_r(self.peer_id.clone().into_inner(), r);
+                return generate_commitment_message_payload((&json_string));
+            } ,
+            Err(e) => panic!("Couldn't serialize commitment")
+        }
+    }
+    pub fn step_2(&mut self) -> MessagePayload{
+        /// step 2 - return the clients R. No extra calculations
+        let peer_id = self.peer_id.clone().into_inner();
+        let r = self.r_s.get(&peer_id).unwrap_or_else(panic!("Didn't compute R"));
+        //let msg_payload =
+        return generate_R_message_payload(&r);
+
+    }
+    /// step 3 - after validating all commitments:
+    /// 1. compute APK
+    /// 2. compute R' = sum(Ri)
+    /// 3. sign message
+    /// 4. generate (and return) signature message payload
+    pub fn step_3(&mut self) -> MessagePayload{
+
+        if !self.validate_commitments() {
+            // commitments sent by others are not valid. exit
+            panic!("Commitments not valid!")
+        }
+        self.aggregate_pks();
+        self.compute_r_tot();
+        let R_tot = self.R_tot.unwrap_or_else(panic!("Didn't compute R_tot!"));
+        let apk = self.agg_key.unwrap_or_else(panic!("Didn't compute apk!"));
+
+
+        let k = Signature::k(&R_tot, &self.agg_key.apk, &self.message);
+        let peer_id = self.peer_id.clone().into_inner();
+        let r = self.r_s.get(&peer_id).unwrap_or_else(panic!("Client has No R ")).clone();
+        let _r = serde_json::from_str(&r);
+        let key = &self.client_key.unwrap_or_else(panic!("No key"));
+        // sign
+        let s = Signature::partial_sign(&_r,&key,&k,&apk.hash,&R_tot);
+        let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
+
+        generate_signature_message_payload(&sig_string)
+    }
+
+
+
+}
+
+impl Eddsa_Client{
     fn resolve_payload_type(message: MessagePayload) -> MessagePayloadType  {
         let msg_payload = message.clone();
 
@@ -352,25 +287,119 @@ impl DataHolder{
             _ => panic!("Unknown relay message prefix")
         }
     }
-
 }
 
-struct ProtocolDataManager{
+impl Peer for Eddsa_Client{
+    fn new(capacity: u32, _message: &'static[u8]) -> DataHolder{
+        DataHolder {
+            client_key: None,
+            pks: HashMap::new(),
+            commitments: HashMap::new(),
+            r_s: HashMap::new(),
+            sigs: HashMap::new(),
+            capacity,
+            message: _message,
+            peer_id: RefCell::new(0),
+            agg_key: None,
+            //current_step: 0,
+        }
+    }
+
+    fn zero_step(&mut self, peer_id:PeerIdentifier) -> Option<MessagePayload> {
+        self.peer_id.replace(peer_id);
+        self.client_key = Some(KeyPair::create());
+        let pk/*:Ed25519Point */= self.client_key.unwrap().public_key.clone();
+        self.add_pk(peer_id, pk);
+
+
+        let pk/*:Ed25519Point */= self.client_key.public_key.unwarp_or_else(panic!("client key not created"));
+        let pk_s = serde_json::to_string(&pk).expect("Failed in serialization");
+        return Some(generate_pk_message_payload(&pk_s));
+    }
+
+    fn do_step(&mut self) ->Option<MessagePayload> {
+        if self.is_step_done() {
+            // do the next step
+            self.current_step += 1;
+            match self.current_step {
+                1 => {return Some(self.data_holder.step_1())},
+                2 => {return Some(self.data_holder.step_2())},
+                3 => {return Some(self.data_holder.step_3())},
+                _=>panic!("Unsupported step")
+            }
+        }
+        None
+    }
+
+    fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload){
+        // update data according to step
+        match self.current_step {
+            0 => self.update_data_step_0(from, payload),
+            1 => self.update_data_step_1(from, payload),
+            2 => self.update_data_step_2(from, payload),
+            3 => self.update_data_step_3(from, payload),
+            _=>panic!("Unsupported step")
+        }
+
+    }
+    /// Does the final calculation of the protocol
+    /// in this case:
+    ///     collection all signatures
+    ///     and verifying the message
+    fn finalize(&mut self) -> Result<(),&'static str> {
+        if !self.is_done(){
+            return Err("not done")
+        }
+        // collect signatures
+        let mut s: Vec<Signature> = Vec::new();
+        for (peer_id, sig) in self.sigs {
+            let signature = serde_json::from_str(&sig).expect("Could not serialize signature!");
+            s.push(signature)
+        }
+        let signature = Signature::add_signature_parts(s);
+
+        // verify message with signature
+        let apk = self.agg_key.unwrap();
+        if verify(&signature,&self.message, &apk.apk){
+            Ok(())
+        } else {
+            Err("failed to verify message with aggregated signature")
+        }
+
+    }
+    /// check that the protocol is done
+/// and that this peer can finalize its calculations
+    fn is_done(&mut self) -> bool {
+        self.is_done_step_3()
+    }
+
+}
+pub trait Peer {
+    fn new(capacity: u32, _message: &'static[u8]) -> Self;
+    fn zero_step(&mut self, peer_id:PeerIdentifier) -> Option<MessagePayload>;
+    fn do_step(&mut self) ->Option<MessagePayload>;
+    fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload);
+    fn finalize(&mut self) -> Result<(),&'static str>;
+    fn is_done(&mut self) -> bool;
+}
+
+struct ProtocolDataManager<T: Peer>{
     pub peer_id: RefCell<PeerIdentifier>,
     pub capacity: u32,
     pub current_step: u32,
-    pub data_holder: DataHolder, // will be filled when initializing, and on each new step
+    pub data_holder: T, // will be filled when initializing, and on each new step
     pub client_data: Option<MessagePayload>, // new data calculated by this peer at the beginning of a step (that needs to be sent to other peers)
     pub new_client_data: bool,
 }
 
-impl ProtocolDataManager{
-    pub fn new(capacity: u32, message:&[u8]) -> ProtocolDataManager{
+impl<T: Peer> ProtocolDataManager<T>{
+    pub fn new(capacity: u32, message:&[u8]) -> ProtocolDataManager<T>
+    where T: Peer{
         ProtocolDataManager {
             peer_id: RefCell::new(0),
             current_step: 0,
             capacity,
-            data_holder: DataHolder::new(capacity, message),
+            data_holder: Peer::new(capacity, message),
             client_data: None,
             new_client_data: false,
             //message: message.clone(),
@@ -387,29 +416,13 @@ impl ProtocolDataManager{
         return self.client_data.clone();
     }
 
-    pub fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload){
-        // update data according to step
-        match self.current_step {
-            0 => self.data_holder.update_data_step_0(from, payload),
-            1 => self.data_holder.update_data_step_1(from, payload),
-            2 => self.data_holder.update_data_step_2(from, payload),
-            3 => self.data_holder.update_data_step_3(from, payload),
-            _=>panic!("Unsupported step")
-        }
 
-    }
-
-
-    /// Update the data with the message received from the server
-    /// according to the step we are
-    pub fn handle_new_data(&mut self, from: PeerIdentifier, payload: MessagePayload) {
-        self.update_data(from, payload);
-        self.data_holder.do_step();
-    }
 
     /// Return the next data this peer needs
     /// to send to other peers
-    pub fn get_next_message(&mut self) -> MessagePayload{
+    pub fn get_next_message(&mut self, from: PeerIdentifier, payload: MessagePayload) -> MessagePayload{
+        self.data_holder.update_data(from, payload);
+        self.client_data = self.data_holder.do_step();
         let data = self.client_data;
         match data {
             Some(data) => {
@@ -427,34 +440,36 @@ impl ProtocolDataManager{
 
 // ClientSession holds session data
 #[derive(Default, Debug, Clone)]
-struct ProtocolSession {
+struct ProtocolSession<T> {
     pub registered: bool,
     pub protocol_id: ProtocolIdentifier,
-    pub data_manager: ProtocolDataManager,
+    pub data_manager: ProtocolDataManager<T>,
     pub last_message: Option<ClientMessage>,
     pub bc_dests: Vec<ProtocolIdentifier>,
     pub timeout: u32,
 }
 
 
-impl ProtocolSession {
-    pub fn new(protocol_id:ProtocolIdentifier, capacity: u32, message: &[u8]) -> ProtocolSession {
+impl<T: Peer> ProtocolSession<T> {
+    pub fn new(protocol_id:ProtocolIdentifier, capacity: u32, message: &[u8]) -> ProtocolSession<T>
+    where T: Peer {
+        let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity, message);
         ProtocolSession {
             registered: false,
             protocol_id,
             last_message: None,
             bc_dests: (1..(capacity+1)).collect(),
             timeout: 5000,
-            data_manager: ProtocolDataManager::new(capacity, message),
+            data_manager: data_m,
         }
     }
 
-    pub fn set_bc_dests(&mut self){
+    fn set_bc_dests(&mut self){
         let index = self.peer_id.clone().into_inner() - 1;
         self.bc_dests.remove(index as usize);
     }
 
-    pub fn handle_relay_message(&mut self, msg: ServerMessage) -> MessagePayload{
+    fn handle_relay_message(&mut self, msg: ServerMessage) -> MessagePayload{
         // parse relay message
         // (if we got here this means we are registered and
         // the client sent the private key)
@@ -463,13 +478,11 @@ impl ProtocolSession {
         let relay_msg = msg.relay_message.unwrap();
         let from = relay_msg.from;
         let payload = msg.message;
-        self.data_manager.handle_new_data(from, payload);
-        let answer = self.data_manager.get_next_message();
-        return answer; //TODO CHANGE THIS
-
+        let answer :MessagePayload = self.data_manager.get_next_message(from, payload);
+        return answer;
     }
 
-    pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Result<ClientMessage, ()> {
+    pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
         let msg_type = resolve_server_msg_type(msg.clone());
         match msg_type {
             ServerMessageType::Response =>{
@@ -484,7 +497,7 @@ impl ProtocolSession {
                 println!("{:?}", msg);
                 let next = self.handle_relay_message(msg.clone());
                 match next {
-                    Ok(next_msg) => return Some(next_msg),
+                    Ok(next_msg) => return Some(self.generate_relay_message(&next_msg)),
                     Err(e) => panic!("Error in handle_relay_message"),
                 }
             },
@@ -499,28 +512,33 @@ impl ProtocolSession {
             }
         }
     }
-//TODO rename to successful 
-    fn handle_register_response(&mut self, peer_id: PeerIdentifier) ->Result<ClientMessage, ()>{
-        println!("Peer identifier: {}",peer_id);
-        // Set the session parameters
-//        self.peer_id.replace(peer_id);
-        self.set_bc_dests();
 
+    pub fn generate_register_message(&mut self) -> ClientMessage{
+        let mut msg = ClientMessage::new();
+        msg.register(session.protocol_id.clone(), session.data_manager.capacity.clone());
+        msg
+    }
 
-        let message =  self.data_manager.initialize(peer_id);
-
+    fn generate_relay_message(&self, payload: &MessagePayload) -> ClientMessage {
+        let msg = ClientMessage::new();
         // create relay message
-        let mut client_message = ClientMessage::new();
         let mut relay_message = RelayMessage::new(self.data_manager.peer_id.clone().into_inner(), self.protocol_id.clone());
         let mut to: Vec<u32> = self.bc_dests.clone();
 
-        // wait a little so we can spawn the other clients
-        let wait_time = time::Duration::from_millis(self.timeout as u64);
-        thread::sleep(wait_time);
+        let mut client_message =  ClientMessage::new();
+        relay_message.set_message_params(to, payload);
+        client_message.relay_message = Some(relay_message);
+        client_message
+    }
 
-        relay_message.set_message_params(0, to, &message);
-        client_message.relay_message = Some(relay_message.clone());
-        return Ok(client_message);
+    fn handle_register_response(&mut self, peer_id: PeerIdentifier) ->Result<ClientMessage, ()>{
+        println!("Peer identifier: {}",peer_id);
+        // Set the session parameters
+        self.set_bc_dests();
+
+        let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(panic!("failed to initialize"));
+
+        Ok(self.generate_relay_message(&message));
     }
 
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
@@ -552,7 +570,8 @@ impl ProtocolSession {
                 },
                 ServerResponse::ErrorResponse(err_msg) => {
                     println!("got error response");
-                    let msg = self.handle_error_response(err_msg);
+                    let err_msg_slice: &str = &err_msg[..];
+                    let msg = self.handle_error_response(err_msg_slice);
                     match msg {
                         Ok(_msg) => return Ok(_msg),
                         Err(e) => return Ok(ClientMessage::new()),
@@ -643,9 +662,9 @@ fn main() {
         println!("sending register message");
         let framed_stream = stream.framed(ClientToServerCodec::new());
 
-        // prepare register message
-        let mut msg = ClientMessage::new();
-	msg.register(session.protocol_id.clone(), session.data_manager.capacity.clone());
+        // prepare register message -- TODO move this to session
+        let mut msg = session.generate_register_message();
+
 
         // send register message to server
         let send_ = framed_stream.send(msg);
