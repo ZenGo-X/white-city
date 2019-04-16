@@ -262,7 +262,7 @@ impl EddsaPeer{
 
 }
 
-impl Eddsa_Client{
+impl EddsaPeer{
     fn resolve_payload_type(message: MessagePayload) -> MessagePayloadType  {
         let msg_payload = message.clone();
 
@@ -289,9 +289,9 @@ impl Eddsa_Client{
     }
 }
 
-impl Peer for Eddsa_Client{
-    fn new(capacity: u32, _message: &'static[u8]) -> DataHolder{
-        DataHolder {
+impl Peer for EddsaPeer{
+    fn new(capacity: u32, _message: &'static[u8]) -> EddsaPeer{
+        EddsaPeer {
             client_key: None,
             pks: HashMap::new(),
             commitments: HashMap::new(),
