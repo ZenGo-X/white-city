@@ -662,7 +662,7 @@ fn main() {
     let _tcp = TcpStream::connect(&addr, &handle);
 
 
-    let mut session = ProtocolSession::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message);
+    let mut session: ProtocolSession<EddsaPeer> = ProtocolSession::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message);
     let client = _tcp.and_then(|stream| {
         println!("sending register message");
         let framed_stream = stream.framed(ClientToServerCodec::new());
