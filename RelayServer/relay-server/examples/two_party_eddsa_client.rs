@@ -220,7 +220,7 @@ impl EddsaPeer{
                 self.add_commitment(peer_id, json_string.clone());
                 let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
                 //let blind_factor = serde_json::to_string(&sign_second_message.blind_factor).expect("Couldn't serialize blind factor");
-                self.add_r(peer_id.into_inner(), r);
+                self.add_r(peer_id, r);
                 return generate_commitment_message_payload((&json_string));
             } ,
             Err(e) => panic!("Couldn't serialize commitment")
