@@ -639,10 +639,10 @@ enum MessagePayloadType {
 }
 
 
-static message: [u8; 4] = [79,77,69,82];
+static _message: [u8; 4] = [79,77,69,82];
 
 fn main() {
-    
+
     let PROTOCOL_IDENTIFIER_ARG = 1;
     let PROTOCOL_CAPACITY_ARG = 2 as ProtocolIdentifier;
 
@@ -660,7 +660,7 @@ fn main() {
     let _tcp = TcpStream::connect(&addr, &handle);
 
 
-    let mut session: ProtocolSession<EddsaPeer> = ProtocolSession::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message);
+    let mut session: ProtocolSession<EddsaPeer> = ProtocolSession::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &_message);
     let client = _tcp.and_then(|stream| {
         println!("sending register message");
         let framed_stream = stream.framed(ClientToServerCodec::new());
