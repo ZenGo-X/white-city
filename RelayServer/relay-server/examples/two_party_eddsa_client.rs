@@ -214,7 +214,7 @@ impl EddsaPeer{
 
         //let commitment = sign_first_message.commitment;
         // save the commitment
-        let peer_id = self.peer_id.clone().into_inner()
+        let peer_id = self.peer_id.clone().into_inner();
         match serde_json::to_string(&sign_first_message){
             Ok(json_string) =>{
                 self.add_commitment(peer_id, json_string.clone());
