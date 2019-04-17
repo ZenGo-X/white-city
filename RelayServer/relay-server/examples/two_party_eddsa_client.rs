@@ -105,18 +105,18 @@ impl EddsaPeer{
         // iterate over all peer Rs
         for (peer_id, r) in self.r_s {
             // convert the json_string to a construct
-            let _r:R = serde_json::from_str(&r).unwrap();
+            let _r:SignSecondMsg = serde_json::from_str(&r).unwrap();
 
             // get the corresponding commitment
             let k = self.peer_id.clone().into_inner();
             let cmtmnt = self.commitments.get(&k)
                 .expect("peer didn't send commitment");
-            let commitment = serde_json::from_str(cmtmnt).unwrap();
+            let commitment:SignFirstMsg = serde_json::from_str(cmtmnt).unwrap();
             // if we couldn't validate the commitment - failure
             if !test_com(
                 &_r.R,
                 &_r.blind_factor,
-                commitment.unwrap_or_else(|| {panic!("couldn't parse commitment json")})
+                &commitment.commitment
             ) {
                 return false;
             }
@@ -501,7 +501,7 @@ impl<T: Peer> ProtocolSession<T> {
                 println!("{:?}", msg);
                 let next = self.handle_relay_message(msg.clone());
                 match next {
-                    Some(next_msg) => return Some(self.generate_relay_message(&next_msg)),
+                    Some(next_msg) => return Some(self.generate_relay_message(next_msg)),
                     None => panic!("Error in handle_relay_message"),
                 }
             },
@@ -523,7 +523,7 @@ impl<T: Peer> ProtocolSession<T> {
         msg
     }
 
-    fn generate_relay_message(&self, payload: &MessagePayload) -> ClientMessage {
+    fn generate_relay_message(&self, payload: MessagePayload) -> ClientMessage {
         let msg = ClientMessage::new();
         // create relay message
         let mut relay_message = RelayMessage::new(self.data_manager.peer_id.clone().into_inner(), self.protocol_id.clone());
@@ -543,7 +543,7 @@ impl<T: Peer> ProtocolSession<T> {
 
         let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(||{panic!("failed to initialize")});
 
-        Ok(self.generate_relay_message(&message))
+        Ok(self.generate_relay_message(message))
     }
 
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
