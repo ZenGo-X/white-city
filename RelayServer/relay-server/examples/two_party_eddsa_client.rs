@@ -434,7 +434,7 @@ impl<T: Peer> ProtocolDataManager<T>{
             },
             None => {
                 let m = relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone();
-                return m;
+                return String::from(m);
             },
         }
     }
@@ -466,21 +466,21 @@ impl<T: Peer> ProtocolSession<T> {
     }
 
     fn set_bc_dests(&mut self){
-        let index = self.peer_id.clone().into_inner() - 1;
+        let index = self.data_manager.peer_id.clone().into_inner() - 1;
         self.bc_dests.remove(index as usize);
     }
 
-    fn handle_relay_message(&mut self, msg: ServerMessage) -> MessagePayload{
+    fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload>{
         // parse relay message
         // (if we got here this means we are registered and
         // the client sent the private key)
 
         // so at the first step we are expecting the pks from all other peers
         let relay_msg = msg.relay_message.unwrap();
-        let from = relay_msg.from;
-        let payload = msg.message;
-        let answer :MessagePayload = self.data_manager.get_next_message(from, payload);
-        return answer;
+        let from = relay_msg.peer_number;
+        let payload = relay_msg.message;
+        let answer: MessagePayload = self.data_manager.get_next_message(from, payload);
+        return Some(answer);
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
@@ -498,17 +498,17 @@ impl<T: Peer> ProtocolSession<T> {
                 println!("{:?}", msg);
                 let next = self.handle_relay_message(msg.clone());
                 match next {
-                    Ok(next_msg) => return Some(self.generate_relay_message(&next_msg)),
-                    Err(e) => panic!("Error in handle_relay_message"),
+                    Some(next_msg) => return Some(self.generate_relay_message(&next_msg)),
+                    None => panic!("Error in handle_relay_message"),
                 }
             },
             ServerMessageType::Abort => {
                 println!("Got abort message");
                 //Ok(MessageProcessResult::NoMessage)
-                Ok(ClientMessage::new())
+                Some(ClientMessage::new())
             },
             ServerMessageType::Undefined => {
-                Ok(ClientMessage::new())
+                Some(ClientMessage::new())
                 //panic!("Got undefined message: {:?}",msg);
             }
         }
@@ -527,7 +527,8 @@ impl<T: Peer> ProtocolSession<T> {
         let mut to: Vec<u32> = self.bc_dests.clone();
 
         let mut client_message =  ClientMessage::new();
-        relay_message.set_message_params(to, payload);
+        let msg = String::from_str(payload);
+        relay_message.set_message_params(to, msg);
         client_message.relay_message = Some(relay_message);
         client_message
     }
