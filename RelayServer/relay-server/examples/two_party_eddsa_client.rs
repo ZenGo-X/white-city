@@ -42,7 +42,7 @@ extern crate curv;
 
 use curv::elliptic::curves::ed25519::*;
 use multi_party_ed25519::protocols::aggsig::{
-    test_com, verify, KeyPair, Signature, EphemeralKey, KeyAgg
+    test_com, verify, KeyPair, Signature, EphemeralKey, KeyAgg, SignFirstMsg, SignSecondMsg
 };
 //use multi_party_ed25519::
 
@@ -63,9 +63,11 @@ struct EddsaPeer{
     pub capacity: u32,
     pub message: &'static[u8],
     pub agg_key: Option<KeyAgg>,
+    pub R_tot: Option<GE>,
     //pub current_step: u32,
 }
-
+//commitment is of type signFirstMessage
+// R is of type signSecondMessage
 impl EddsaPeer{
     fn add_pk(&mut self, peer_id: PeerIdentifier, pk: Ed25519Point){
         self.pks.insert(peer_id, pk);
@@ -80,8 +82,9 @@ impl EddsaPeer{
     }
     fn compute_r_tot(&mut self) {
         let mut Ri:Vec<GE> = Vec::new();
-        for (peer_id, (r, blind)) in self.r_s {
-            let _r = serde_json::from_str(r);
+        for (peer_id, r) in self.r_s {
+            let r_sloce:&str = &r[..];
+            let _r:SignSecondMsg = serde_json::from_str(r_slice).unwrap_or_else(panic!("serialization error"));
             Ri.push(_r.R.clone());
         }
         let r_tot= Signature::get_R_tot(Ri);
@@ -90,7 +93,7 @@ impl EddsaPeer{
     fn aggregate_pks(&mut self) {
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for (peer, pk) in self.pks {
-            pks[peer - 1] = pk;
+            pks[(peer - 1) as usize] = pk;
         }
         let peer_id = self.peer_id.clone().into_inner();
         let index = (peer_id - 1) as usize;
@@ -101,7 +104,7 @@ impl EddsaPeer{
         // iterate over all peer Rs
         for (peer_id, r) in self.r_s {
             // convert the json_string to a construct
-            let _r = serde_json::from_str(&r).unwrap();
+            let _r:R = serde_json::from_str(&r).unwrap();
 
             // get the corresponding commitment
             let k = self.peer_id.clone().into_inner();
@@ -208,9 +211,9 @@ impl EddsaPeer{
         let (ephemeral_key, sign_first_message, sign_second_message) =
             Signature::create_ephemeral_key_and_commit(&k, &self.message);
 
-        let commitment = sign_first_message.commitment;
+        //let commitment = sign_first_message.commitment;
         // save the commitment
-        match serde_json::to_string(commitment){
+        match serde_json::to_string(&sign_first_message){
             Ok(json_string) =>{
                 self.add_commitment(self.peer_id.clone().into_inner(), json_string.clone());
                 let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
@@ -225,7 +228,6 @@ impl EddsaPeer{
         /// step 2 - return the clients R. No extra calculations
         let peer_id = self.peer_id.clone().into_inner();
         let r = self.r_s.get(&peer_id).unwrap_or_else(panic!("Didn't compute R"));
-        //let msg_payload =
         return generate_R_message_payload(&r);
 
     }
@@ -249,7 +251,7 @@ impl EddsaPeer{
         let k = Signature::k(&R_tot, &self.agg_key.apk, &self.message);
         let peer_id = self.peer_id.clone().into_inner();
         let r = self.r_s.get(&peer_id).unwrap_or_else(panic!("Client has No R ")).clone();
-        let _r = serde_json::from_str(&r);
+        let _r: SignSecondMsg = serde_json::from_str(&r);
         let key = &self.client_key.unwrap_or_else(panic!("No key"));
         // sign
         let s = Signature::partial_sign(&_r,&key,&k,&apk.hash,&R_tot);
@@ -302,6 +304,7 @@ impl Peer for EddsaPeer{
             peer_id: RefCell::new(0),
             agg_key: None,
             //current_step: 0,
+            R_tot: None,
         }
     }
 
