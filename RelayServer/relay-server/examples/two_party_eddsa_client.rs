@@ -52,7 +52,6 @@ use relay_server_common::common::*;
 use dict::{ Dict, DictIface };
 use std::collections::HashMap;
 
-//#[derive(Debug)]
 struct EddsaPeer{
     pub peer_id: RefCell<PeerIdentifier>,
     pub client_key: Option<KeyPair>,
@@ -66,6 +65,7 @@ struct EddsaPeer{
     pub R_tot: Option<GE>,
     //pub current_step: u32,
 }
+
 //commitment is of type signFirstMessage
 // R is of type signSecondMessage
 impl EddsaPeer{
@@ -441,8 +441,6 @@ impl<T: Peer> ProtocolDataManager<T>{
 }
 
 
-// ClientSession holds session data
-#[derive(Default, Debug, Clone)]
 struct ProtocolSession<T> where T: Peer{
     pub registered: bool,
     pub protocol_id: ProtocolIdentifier,
