@@ -84,7 +84,7 @@ impl EddsaPeer{
         let mut Ri:Vec<GE> = Vec::new();
         for (peer_id, r) in self.r_s {
             let r_sloce:&str = &r[..];
-            let _r:SignSecondMsg = serde_json::from_str(r_slice).unwrap_or_else(panic!("serialization error"));
+            let _r:SignSecondMsg = serde_json::from_str(r_slice).unwrap_or_else(|| {panic!("serialization error")});
             Ri.push(_r.R.clone());
         }
         let r_tot= Signature::get_R_tot(Ri);
@@ -115,7 +115,7 @@ impl EddsaPeer{
             if !test_com(
                 &_r.R,
                 &_r.blind_factor,
-                commitment.unwrap_or_else(panic!("couldn't parse commitment json"))
+                commitment.unwrap_or_else(|| {panic!("couldn't parse commitment json")})
             ) {
                 return false;
             }
@@ -127,7 +127,7 @@ impl EddsaPeer{
 impl EddsaPeer {
     /// data updaters for each step
     pub fn update_data_step_0(&mut self, from: PeerIdentifier, payload: MessagePayload) {
-        let payload_type = self.resolve_payload_type(&payload);
+        let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::PUBLIC_KEY(pk) => {
                 let s_slice: &str = &pk[..];  // take a full slice of the string
@@ -142,7 +142,7 @@ impl EddsaPeer {
     }
 
     pub fn update_data_step_1(&mut self, from: PeerIdentifier, payload: MessagePayload) {
-        let payload_type = self.resolve_payload_type(&payload);
+        let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::COMMITMENT(t) => {
                 self.add_commitment(from, t);
@@ -207,7 +207,7 @@ impl EddsaPeer{
         // (this implicitly means each party also calculates ephemeral key
         // on this step)
         // round 1: send commitments to ephemeral public keys
-        let k = self.client_key.unwrap_or_else(panic!("No client key"));
+        let k = self.client_key.unwrap_or_else(||{panic!("No client key")});
         let (ephemeral_key, sign_first_message, sign_second_message) =
             Signature::create_ephemeral_key_and_commit(&k, &self.message);
 
@@ -227,7 +227,7 @@ impl EddsaPeer{
     pub fn step_2(&mut self) -> MessagePayload{
         /// step 2 - return the clients R. No extra calculations
         let peer_id = self.peer_id.clone().into_inner();
-        let r = self.r_s.get(&peer_id).unwrap_or_else(panic!("Didn't compute R"));
+        let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Didn't compute R")});
         return generate_R_message_payload(&r);
 
     }
@@ -244,15 +244,15 @@ impl EddsaPeer{
         }
         self.aggregate_pks();
         self.compute_r_tot();
-        let R_tot = self.R_tot.unwrap_or_else(panic!("Didn't compute R_tot!"));
-        let apk = self.agg_key.unwrap_or_else(panic!("Didn't compute apk!"));
+        let R_tot = self.R_tot.unwrap_or_else(||{panic!("Didn't compute R_tot!")});
+        let apk = self.agg_key.unwrap_or_else(||{panic!("Didn't compute apk!")});
 
 
         let k = Signature::k(&R_tot, &self.agg_key.apk, &self.message);
         let peer_id = self.peer_id.clone().into_inner();
-        let r = self.r_s.get(&peer_id).unwrap_or_else(panic!("Client has No R ")).clone();
+        let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
         let _r: SignSecondMsg = serde_json::from_str(&r);
-        let key = &self.client_key.unwrap_or_else(panic!("No key"));
+        let key = &self.client_key.unwrap_or_else(||{panic!("No key")});
         // sign
         let s = Signature::partial_sign(&_r,&key,&k,&apk.hash,&R_tot);
         let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
@@ -265,7 +265,7 @@ impl EddsaPeer{
 }
 
 impl EddsaPeer{
-    fn resolve_payload_type(message: MessagePayload) -> MessagePayloadType  {
+    fn resolve_payload_type(message: &MessagePayload) -> MessagePayloadType  {
         let msg_payload = message.clone();
 
         let split_msg:Vec<&str> = msg_payload.split(RELAY_MESSAGE_DELIMITER).collect();
@@ -527,7 +527,7 @@ impl<T: Peer> ProtocolSession<T> {
         let mut to: Vec<u32> = self.bc_dests.clone();
 
         let mut client_message =  ClientMessage::new();
-        let msg = String::from_str(payload);
+        let msg = String::from(payload);
         relay_message.set_message_params(to, msg);
         client_message.relay_message = Some(relay_message);
         client_message
@@ -538,7 +538,7 @@ impl<T: Peer> ProtocolSession<T> {
         // Set the session parameters
         self.set_bc_dests();
 
-        let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(panic!("failed to initialize"));
+        let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(||{panic!("failed to initialize")});
 
         Ok(self.generate_relay_message(&message));
     }
