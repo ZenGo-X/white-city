@@ -214,12 +214,13 @@ impl EddsaPeer{
 
         //let commitment = sign_first_message.commitment;
         // save the commitment
+        let peer_id = self.peer_id.clone().into_inner()
         match serde_json::to_string(&sign_first_message){
             Ok(json_string) =>{
-                self.add_commitment(self.peer_id.clone().into_inner(), json_string.clone());
+                self.add_commitment(peer_id, json_string.clone());
                 let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
                 //let blind_factor = serde_json::to_string(&sign_second_message.blind_factor).expect("Couldn't serialize blind factor");
-                self.add_r(self.peer_id.clone().into_inner(), r);
+                self.add_r(peer_id.into_inner(), r);
                 return generate_commitment_message_payload((&json_string));
             } ,
             Err(e) => panic!("Couldn't serialize commitment")
