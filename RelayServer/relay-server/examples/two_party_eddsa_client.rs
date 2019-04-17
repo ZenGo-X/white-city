@@ -248,13 +248,13 @@ impl EddsaPeer{
         let apk = self.agg_key.unwrap_or_else(||{panic!("Didn't compute apk!")});
 
 
-        let k = Signature::k(&R_tot, &self.agg_key.apk, &self.message);
+        let k = Signature::k(&R_tot, &self.agg_key.unwrap_or_else(||{panic!("No AggKey")}).apk, &self.message);
         let peer_id = self.peer_id.clone().into_inner();
         let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
-        let _r: SignSecondMsg = serde_json::from_str(&r);
-        let key = &self.client_key.unwrap_or_else(||{panic!("No key")});
+        let _r: SignSecondMsg = serde_json::from_str(&r).unwrap_or_else(|| {panic!("failed to deserialize R")});
+        let key = &self.client_key;
         // sign
-        let s = Signature::partial_sign(&_r,&key,&k,&apk.hash,&R_tot);
+        let s = Signature::partial_sign(&_r.R,key,&k,&apk.hash,&R_tot);
         let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
 
         generate_signature_message_payload(&sig_string)
@@ -396,7 +396,7 @@ struct ProtocolDataManager<T: Peer>{
 }
 
 impl<T: Peer> ProtocolDataManager<T>{
-    pub fn new(capacity: u32, message:&[u8]) -> ProtocolDataManager<T>
+    pub fn new(capacity: u32, message:&'static[u8]) -> ProtocolDataManager<T>
     where T: Peer{
         ProtocolDataManager {
             peer_id: RefCell::new(0),
@@ -527,8 +527,8 @@ impl<T: Peer> ProtocolSession<T> {
         let mut to: Vec<u32> = self.bc_dests.clone();
 
         let mut client_message =  ClientMessage::new();
-        let msg = String::from(payload);
-        relay_message.set_message_params(to, msg);
+
+        relay_message.set_message_params(to,&payload);
         client_message.relay_message = Some(relay_message);
         client_message
     }
@@ -540,7 +540,7 @@ impl<T: Peer> ProtocolSession<T> {
 
         let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(||{panic!("failed to initialize")});
 
-        Ok(self.generate_relay_message(&message));
+        Ok(self.generate_relay_message(&message))
     }
 
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
