@@ -42,7 +42,7 @@ extern crate curv;
 
 use curv::elliptic::curves::ed25519::*;
 use multi_party_ed25519::protocols::aggsig::{
-    test_com, verify, KeyPair, Signature, EphemeralKey, KeyAgg, SignFirstMsg, SignSecondMsg
+    test_com, verify, KeyPair, Signature, EphemeralKey, KeyAgg, SignFirstMsg, SignSecondMsg, EphemeralKey
 };
 //use multi_party_ed25519::
 
@@ -64,6 +64,7 @@ struct EddsaPeer{
     pub agg_key: Option<KeyAgg>,
     pub R_tot: Option<GE>,
     pub current_step: u32,
+    pub ephemeral_key: Option<EphemeralKey>,
 }
 
 //commitment is of type signFirstMessage
@@ -254,7 +255,8 @@ impl EddsaPeer{
         let _r: SignSecondMsg = serde_json::from_str(&r).unwrap_or_else(|| {panic!("failed to deserialize R")});
         let key = &self.client_key;
         // sign
-        let s = Signature::partial_sign(&_r.R,key,&k,&apk.hash,&R_tot);
+        let ephemeral_key = self.ephemeral_key.unwrap_or_else(||{panic!("No ephemeral key")});
+        let s = Signature::partial_sign(&ephemeral_key.r,key,&k,&apk.hash,&R_tot);
         let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
 
         generate_signature_message_payload(&sig_string)
@@ -305,6 +307,7 @@ impl Peer for EddsaPeer{
             agg_key: None,
             current_step: 0,
             R_tot: None,
+            ephemeral_key: None,
         }
     }
 
@@ -452,7 +455,7 @@ struct ProtocolSession<T> where T: Peer{
 
 
 impl<T: Peer> ProtocolSession<T> {
-    pub fn new(protocol_id:ProtocolIdentifier, capacity: u32, message: &[u8]) -> ProtocolSession<T>
+    pub fn new(protocol_id:ProtocolIdentifier, capacity: u32, message: &'static[u8]) -> ProtocolSession<T>
     where T: Peer {
         let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity, message);
         ProtocolSession {
@@ -528,7 +531,7 @@ impl<T: Peer> ProtocolSession<T> {
 
         let mut client_message =  ClientMessage::new();
 
-        relay_message.set_message_params(to,&payload);
+        relay_message.set_message_params(to,payload);
         client_message.relay_message = Some(relay_message);
         client_message
     }
@@ -544,7 +547,7 @@ impl<T: Peer> ProtocolSession<T> {
     }
 
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
-        match  err_msg{
+        match err_msg{
             resp if resp == String::from(NOT_YOUR_TURN) => {
                 println!("not my turn");
                 // wait
@@ -555,7 +558,7 @@ impl<T: Peer> ProtocolSession<T> {
                 //TODO handle None
                 return Ok(msg)
             },
-            _ => {return Err(err_msg)}
+            _ => {return Err("error response handling failed")}
         }
     }
 
