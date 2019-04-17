@@ -563,7 +563,7 @@ impl<T: Peer> ProtocolSession<T> {
     }
 
     fn handle_server_response(&mut self, msg: &ServerMessage) -> Result<ClientMessage, &'static str>{
-        let server_response = msg.response.unwrap();
+        let server_response = msg.response.clone().unwrap();
         match server_response
             {
                 ServerResponse::Register(peer_id) => {
@@ -639,12 +639,10 @@ enum MessagePayloadType {
 }
 
 
+static message: [u8; 4] = [79,77,69,82];
 
 fn main() {
-    // message for signing
-    let message: [u8; 4] = [79,77,69,82];
-
-
+    
     let PROTOCOL_IDENTIFIER_ARG = 1;
     let PROTOCOL_CAPACITY_ARG = 2 as ProtocolIdentifier;
 
@@ -667,7 +665,6 @@ fn main() {
         println!("sending register message");
         let framed_stream = stream.framed(ClientToServerCodec::new());
 
-        // prepare register message -- TODO move this to session
         let mut msg = session.generate_register_message();
 
 
