@@ -208,7 +208,7 @@ impl EddsaPeer{
         // (this implicitly means each party also calculates ephemeral key
         // on this step)
         // round 1: send commitments to ephemeral public keys
-        let k = &self.client_key;
+        let mut k = &self.client_key;
         let (ephemeral_key, sign_first_message, sign_second_message) =
             Signature::create_ephemeral_key_and_commit(k, &self.message);
 
