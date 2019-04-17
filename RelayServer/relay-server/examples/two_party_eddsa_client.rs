@@ -42,7 +42,7 @@ extern crate curv;
 
 use curv::elliptic::curves::ed25519::*;
 use multi_party_ed25519::protocols::aggsig::{
-    test_com, verify, KeyPair, Signature, EphemeralKey, KeyAgg, SignFirstMsg, SignSecondMsg, EphemeralKey
+    test_com, verify, KeyPair, Signature, EphemeralKey, KeyAgg, SignFirstMsg, SignSecondMsg
 };
 //use multi_party_ed25519::
 
@@ -84,7 +84,7 @@ impl EddsaPeer{
     fn compute_r_tot(&mut self) {
         let mut Ri:Vec<GE> = Vec::new();
         for (peer_id, r) in self.r_s {
-            let r_sloce:&str = &r[..];
+            let r_slice:&str = &r[..];
             let _r:SignSecondMsg = serde_json::from_str(r_slice).unwrap_or_else(|e| {panic!("serialization error")});
             Ri.push(_r.R.clone());
         }
