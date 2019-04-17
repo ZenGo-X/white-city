@@ -54,7 +54,7 @@ use std::collections::HashMap;
 
 struct EddsaPeer{
     pub peer_id: RefCell<PeerIdentifier>,
-    pub client_key: Option<KeyPair>,
+    pub client_key: KeyPair,
     pub pks: HashMap<PeerIdentifier, Ed25519Point>,
     pub commitments: HashMap<PeerIdentifier, String>,
     pub r_s: HashMap<PeerIdentifier, String>,
@@ -63,7 +63,7 @@ struct EddsaPeer{
     pub message: &'static[u8],
     pub agg_key: Option<KeyAgg>,
     pub R_tot: Option<GE>,
-    //pub current_step: u32,
+    pub current_step: u32,
 }
 
 //commitment is of type signFirstMessage
@@ -207,7 +207,7 @@ impl EddsaPeer{
         // (this implicitly means each party also calculates ephemeral key
         // on this step)
         // round 1: send commitments to ephemeral public keys
-        let k = self.client_key.unwrap_or_else(||{panic!("No client key")});
+        let k = &self.client_key.public_key;
         let (ephemeral_key, sign_first_message, sign_second_message) =
             Signature::create_ephemeral_key_and_commit(&k, &self.message);
 
@@ -294,7 +294,7 @@ impl EddsaPeer{
 impl Peer for EddsaPeer{
     fn new(capacity: u32, _message: &'static[u8]) -> EddsaPeer{
         EddsaPeer {
-            client_key: None,
+            client_key: KeyPair::create(),
             pks: HashMap::new(),
             commitments: HashMap::new(),
             r_s: HashMap::new(),
@@ -303,19 +303,17 @@ impl Peer for EddsaPeer{
             message: _message,
             peer_id: RefCell::new(0),
             agg_key: None,
-            //current_step: 0,
+            current_step: 0,
             R_tot: None,
         }
     }
 
     fn zero_step(&mut self, peer_id:PeerIdentifier) -> Option<MessagePayload> {
         self.peer_id.replace(peer_id);
-        self.client_key = Some(KeyPair::create());
-        let pk/*:Ed25519Point */= self.client_key.unwrap().public_key.clone();
+        let pk/*:Ed25519Point */= self.client_key.public_key.clone();
         self.add_pk(peer_id, pk);
 
 
-        let pk/*:Ed25519Point */= self.client_key.public_key.unwarp_or_else(panic!("client key not created"));
         let pk_s = serde_json::to_string(&pk).expect("Failed in serialization");
         return Some(generate_pk_message_payload(&pk_s));
     }
@@ -325,9 +323,9 @@ impl Peer for EddsaPeer{
             // do the next step
             self.current_step += 1;
             match self.current_step {
-                1 => {return Some(self.data_holder.step_1())},
-                2 => {return Some(self.data_holder.step_2())},
-                3 => {return Some(self.data_holder.step_3())},
+                1 => {return Some(self.step_1())},
+                2 => {return Some(self.step_2())},
+                3 => {return Some(self.step_3())},
                 _=>panic!("Unsupported step")
             }
         }
@@ -363,10 +361,12 @@ impl Peer for EddsaPeer{
 
         // verify message with signature
         let apk = self.agg_key.unwrap();
-        if verify(&signature,&self.message, &apk.apk){
-            Ok(())
-        } else {
-            Err("failed to verify message with aggregated signature")
+        match verify(&signature,&self.message, &apk.apk){
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let s = format!("{}",e);
+                Err(&s[..])
+            }
         }
 
     }
