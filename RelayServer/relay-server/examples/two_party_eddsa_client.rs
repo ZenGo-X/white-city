@@ -248,7 +248,7 @@ impl EddsaPeer{
         }
         let agg_key = self.aggregate_pks();
         let r_tot = self.compute_r_tot();
-        let eph_key = self.ephemeral_key.clone()
+        let eph_key = self.ephemeral_key.clone();
         match eph_key {
             Some(eph_key) => {
                 let k = Signature::k(&r_tot, &agg_key.apk, &self.message);
@@ -433,17 +433,17 @@ impl<T: Peer> ProtocolDataManager<T>{
     pub fn get_next_message(&mut self, from: PeerIdentifier, payload: MessagePayload) -> MessagePayload{
         self.data_holder.update_data(from, payload);
         self.client_data = self.data_holder.do_step();
-        let data = self.client_data;
-        match data {
-            Some(data) => {
+        match self.client_data {
+            Some(ref data) => {
                 self.client_data = None;
-                return data;
+                return String::from(data);
             },
             None => {
                 let m = relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone();
                 return String::from(m);
-            },
+            }
         }
+
     }
 }
 
