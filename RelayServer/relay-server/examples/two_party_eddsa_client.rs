@@ -487,7 +487,7 @@ impl<T: Peer> ProtocolSession<T> {
                 let next =self.handle_server_response(&msg);
                 match next {
                     Ok(next_msg) => {
-                        new_msg = Some(next_msg);
+                        new_message = Some(next_msg);
                     },
                     Err(e) => panic!("Error in handle_server_response"),
                 }
@@ -566,7 +566,7 @@ impl<T: Peer> ProtocolSession<T> {
         let last_msg = self.last_message.clone().into_inner();
         if last_msg.is_empty(){
             return None;
-        }else { return last_msg.clone(); }
+        }else { return Some(last_msg.clone()); }
     }
 
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
@@ -576,7 +576,7 @@ impl<T: Peer> ProtocolSession<T> {
                 // wait
                 self.wait_timeout();
                 println!("sending again");
-                let last_meg = self.get_last_message();
+                let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) =>{
                         return Ok(msg.clone())
