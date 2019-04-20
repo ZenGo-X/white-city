@@ -441,7 +441,7 @@ struct ProtocolSession<T> where T: Peer{
     pub registered: bool,
     pub protocol_id: ProtocolIdentifier,
     pub data_manager: ProtocolDataManager<T>,
-    pub last_message: Option<ClientMessage>,
+    pub last_message: RefCell<ClientMessage>,
     pub bc_dests: Vec<ProtocolIdentifier>,
     pub timeout: u32,
 }
@@ -454,7 +454,7 @@ impl<T: Peer> ProtocolSession<T> {
         ProtocolSession {
             registered: false,
             protocol_id,
-            last_message: None,
+            last_message: RefCell::new(ClientMessage::new()),
             bc_dests: (1..(capacity+1)).collect(),
             timeout: 5000,
             data_manager: data_m,
@@ -468,10 +468,7 @@ impl<T: Peer> ProtocolSession<T> {
 
     fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload>{
         // parse relay message
-        // (if we got here this means we are registered and
-        // the client sent the private key)
 
-        // so at the first step we are expecting the pks from all other peers
         let relay_msg = msg.relay_message.unwrap();
         let from = relay_msg.peer_number;
         let payload = relay_msg.message;
@@ -479,12 +476,16 @@ impl<T: Peer> ProtocolSession<T> {
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
+        let last_message = self.last_message.clone().into_inner();
+        let mut new_message = None;
         let msg_type = resolve_server_msg_type(msg.clone());
         match msg_type {
             ServerMessageType::Response =>{
                 let next =self.handle_server_response(&msg);
                 match next {
-                    Ok(next_msg) => return Some(next_msg),
+                    Ok(next_msg) => {
+                        new_msg = Some(next_msg);
+                    },
                     Err(e) => panic!("Error in handle_server_response"),
                 }
             },
@@ -493,19 +494,34 @@ impl<T: Peer> ProtocolSession<T> {
                 println!("{:?}", msg);
                 let next = self.handle_relay_message(msg.clone());
                 match next {
-                    Some(next_msg) => return Some(self.generate_relay_message(next_msg)),
+                    Some(next_msg) => {
+                        new_message = Some(self.generate_relay_message(next_msg.clone()));
+                    },
                     None => panic!("Error in handle_relay_message"),
                 }
             },
             ServerMessageType::Abort => {
                 println!("Got abort message");
                 //Ok(MessageProcessResult::NoMessage)
-                Some(ClientMessage::new())
+                new_message = Some(ClientMessage::new());
             },
             ServerMessageType::Undefined => {
-                Some(ClientMessage::new())
+                new_message = Some(ClientMessage::new());
                 //panic!("Got undefined message: {:?}",msg);
             }
+        };
+        if last_message.is_empty() {
+            match new_message{
+                Some(msg) => {
+                    self.last_message.replace(msg.clone());
+                    return Some(msg.clone());
+                },
+                None => return None
+            }
+        } else {
+            let _last_msg = last_message.clone();
+            self.last_message.replace(new_message.unwrap());
+            return Some(_last_msg);
         }
     }
 

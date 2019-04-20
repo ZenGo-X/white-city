@@ -153,7 +153,9 @@ impl ClientMessage {
 
     }
 
-
+    pub fn is_empty(&self) -> bool{
+        self.relay_message.is_none() && self.abort.is_none() && self.register.is_none()
+    }
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
