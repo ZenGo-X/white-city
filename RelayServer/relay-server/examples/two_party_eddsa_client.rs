@@ -248,9 +248,15 @@ impl EddsaPeer{
         }
         let agg_key = self.aggregate_pks();
         let r_tot = self.compute_r_tot();
+<<<<<<< HEAD
         let eph_key = self.ephemeral_key.clone();
         match eph_key {
             Some(eph_key) => {
+=======
+//        let eph_key = self.ephemeral_key.clone();
+        match self.ephemeral_key {
+            Some(ref eph_key) => {
+>>>>>>> 77d1e555cef6d2314e37a5a87ba486339a6fae43
                 let k = Signature::k(&r_tot, &agg_key.apk, &self.message);
                 let peer_id = self.peer_id.clone().into_inner();
                 let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
@@ -361,14 +367,14 @@ impl Peer for EddsaPeer{
         }
         // collect signatures
         let mut s: Vec<Signature> = Vec::new();
-        for (peer_id, sig) in self.sigs {
+        for sig in self.sigs.values() {
             let signature = serde_json::from_str(&sig).expect("Could not serialize signature!");
             s.push(signature)
         }
         let signature = Signature::add_signature_parts(s);
 
         // verify message with signature
-        let apk = self.agg_key.unwrap();
+        let apk = self.aggregate_pks();
         match verify(&signature,&self.message, &apk.apk){
             Ok(_) => Ok(()),
             Err(e) => {
