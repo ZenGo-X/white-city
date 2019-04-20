@@ -83,8 +83,8 @@ impl EddsaPeer{
     }
     fn compute_r_tot(&mut self) {
         let mut Ri:Vec<GE> = Vec::new();
-        for (peer_id, r) in self.r_s {
-            let r_slice:&str = &r[..];
+        for (peer_id, r) in &self.r_s {
+            let r_slice:&str = r[..];
             let _r:SignSecondMsg = serde_json::from_str(r_slice).unwrap_or_else(|e| {panic!("serialization error")});
             Ri.push(_r.R.clone());
         }
@@ -93,7 +93,7 @@ impl EddsaPeer{
     }
     fn aggregate_pks(&mut self) {
         let mut pks = Vec::with_capacity(self.capacity as usize);
-        for (peer, pk) in self.pks {
+        for (peer, pk) in &self.pks {
             pks[(peer - 1) as usize] = pk;
         }
         let peer_id = self.peer_id.clone().into_inner();
@@ -103,9 +103,10 @@ impl EddsaPeer{
     }
     fn validate_commitments(&mut self) -> bool{
         // iterate over all peer Rs
-        for (peer_id, r) in self.r_s {
+        let r_s = &self.r_s;
+        for (peer_id, r) in  r_s{
             // convert the json_string to a construct
-            let _r:SignSecondMsg = serde_json::from_str(&r).unwrap();
+            let _r:SignSecondMsg = serde_json::from_str(r).unwrap();
 
             // get the corresponding commitment
             let k = self.peer_id.clone().into_inner();
@@ -208,10 +209,11 @@ impl EddsaPeer{
         // (this implicitly means each party also calculates ephemeral key
         // on this step)
         // round 1: send commitments to ephemeral public keys
-        let mut k = &self.client_key;
+        //let mut k = &self.client_key;
         let (ephemeral_key, sign_first_message, sign_second_message) =
-            Signature::create_ephemeral_key_and_commit(k, &self.message);
+            Signature::create_ephemeral_key_and_commit(&self.client_key, &self.message);
 
+        self.ephemeral_key = Some(ephemeral_key);
         //let commitment = sign_first_message.commitment;
         // save the commitment
         let peer_id = self.peer_id.clone().into_inner();
@@ -247,20 +249,25 @@ impl EddsaPeer{
         self.aggregate_pks();
         self.compute_r_tot();
         let R_tot = self.R_tot.unwrap_or_else(||{panic!("Didn't compute R_tot!")});
-        let apk = self.agg_key.unwrap_or_else(||{panic!("Didn't compute apk!")});
+        self.R_tot.map(|r_tot|{
+            self.agg_key.map(|agg_key|{
+                self.ephemeral_key.map(|eph_key|{
+                    let k = Signature::k(&r_tot, &agg_key.apk, &self.message);
+                    let peer_id = self.peer_id.clone().into_inner();
+                    let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
+                    let _r: SignSecondMsg = serde_json::from_str(&r).unwrap_or_else(|e| {panic!("failed to deserialize R")});
+                    let key = &self.client_key;
 
+                    // sign
+                    let s = Signature::partial_sign(&eph_key.r,key,&k,&apk.hash,&r_tot);
+                    let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
 
-        let k = Signature::k(&R_tot, &self.agg_key.unwrap_or_else(||{panic!("No AggKey")}).apk, &self.message);
-        let peer_id = self.peer_id.clone().into_inner();
-        let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
-        let _r: SignSecondMsg = serde_json::from_str(&r).unwrap_or_else(|e| {panic!("failed to deserialize R")});
-        let key = &self.client_key;
-        // sign
-        let ephemeral_key = self.ephemeral_key.unwrap_or_else(||{panic!("No ephemeral key")});
-        let s = Signature::partial_sign(&ephemeral_key.r,key,&k,&apk.hash,&R_tot);
-        let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
+                    return generate_signature_message_payload(&sig_string)
+                });
+            })
+        });
+        return relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone();
 
-        generate_signature_message_payload(&sig_string)
     }
 
 
@@ -368,8 +375,8 @@ impl Peer for EddsaPeer{
         match verify(&signature,&self.message, &apk.apk){
             Ok(_) => Ok(()),
             Err(e) => {
-                let s = format!("{}",e);
-                Err(&s[..])
+                let s = String::from(e);
+                Err("Failed to verify")
             }
         }
 
