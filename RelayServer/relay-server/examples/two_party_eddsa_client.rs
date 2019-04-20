@@ -248,9 +248,9 @@ impl EddsaPeer{
         }
         let agg_key = self.aggregate_pks();
         let r_tot = self.compute_r_tot();
-        let eph_key = self.ephemeral_key.clone()
-        match eph_key {
-            Some(eph_key) => {
+//        let eph_key = self.ephemeral_key.clone();
+        match self.ephemeral_key {
+            Some(ref eph_key) => {
                 let k = Signature::k(&r_tot, &agg_key.apk, &self.message);
                 let peer_id = self.peer_id.clone().into_inner();
                 let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
@@ -361,14 +361,14 @@ impl Peer for EddsaPeer{
         }
         // collect signatures
         let mut s: Vec<Signature> = Vec::new();
-        for (peer_id, sig) in self.sigs {
+        for sig in self.sigs.values() {
             let signature = serde_json::from_str(&sig).expect("Could not serialize signature!");
             s.push(signature)
         }
         let signature = Signature::add_signature_parts(s);
 
         // verify message with signature
-        let apk = self.agg_key.unwrap();
+        let apk = self.aggregate_pks();
         match verify(&signature,&self.message, &apk.apk){
             Ok(_) => Ok(()),
             Err(e) => {
@@ -433,11 +433,12 @@ impl<T: Peer> ProtocolDataManager<T>{
     pub fn get_next_message(&mut self, from: PeerIdentifier, payload: MessagePayload) -> MessagePayload{
         self.data_holder.update_data(from, payload);
         self.client_data = self.data_holder.do_step();
-        let data = self.client_data;
-        match data {
+//        let data = self.client_data;
+        match self.client_data {
             Some(data) => {
+                let data = **data;
                 self.client_data = None;
-                return data;
+return data;
             },
             None => {
                 let m = relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone();
