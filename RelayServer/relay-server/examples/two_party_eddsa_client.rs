@@ -471,7 +471,6 @@ impl<T: Peer> ProtocolSession<T> {
 
     fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload>{
         // parse relay message
-
         let relay_msg = msg.relay_message.unwrap();
         let from = relay_msg.peer_number;
         let payload = relay_msg.message;
@@ -484,7 +483,7 @@ impl<T: Peer> ProtocolSession<T> {
         let msg_type = resolve_server_msg_type(msg.clone());
         match msg_type {
             ServerMessageType::Response =>{
-                let next =self.handle_server_response(&msg);
+                let next = self.handle_server_response(&msg);
                 match next {
                     Ok(next_msg) => {
                         new_message = Some(next_msg);
@@ -562,11 +561,10 @@ impl<T: Peer> ProtocolSession<T> {
         self.last_message.replace(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
     }
+
     fn get_last_message(&self) -> Option<ClientMessage>{
         let last_msg = self.last_message.clone().into_inner();
-        if last_msg.is_empty(){
-            return None;
-        }else { return Some(last_msg.clone()); }
+        return Some(last_msg.clone()); 
     }
 
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
