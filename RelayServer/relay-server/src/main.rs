@@ -405,6 +405,7 @@ impl RelaySession {
             else{
                peer_id = p.peer_id;
                peer_disconnected = true;
+               println!("aborted from peer #: {:}",peer_id);
             }
         }
         if peer_disconnected {
