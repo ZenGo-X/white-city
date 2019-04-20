@@ -549,6 +549,11 @@ impl<T: Peer> ProtocolSession<T> {
         client_message
     }
 
+    fn wait_timeout(&self){
+        let wait_time = time::Duration::from_millis(self.timeout as u64);
+        thread::sleep(wait_time);
+    }
+
     fn handle_register_response(&mut self, peer_id: PeerIdentifier) ->Result<ClientMessage, ()>{
         println!("Peer identifier: {}",peer_id);
         // Set the session parameters
@@ -557,22 +562,21 @@ impl<T: Peer> ProtocolSession<T> {
         self.last_message.replace(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
     }
-
-    fn wait_and_get_message(){
-
+    fn get_last_message(&self) -> Option<ClientMessage>{
+        let last_msg = self.last_message.clone().into_inner();
+        if last_msg.is_empty(){
+            return None;
+        }else { return last_msg.clone(); }
     }
 
-    fn update_last_message(){}	
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
         match err_msg{
             resp if resp == String::from(NOT_YOUR_TURN) => {
                 println!("not my turn");
                 // wait
-
-                let wait_time = time::Duration::from_millis(self.timeout as u64);
-                thread::sleep(wait_time);
+                self.wait_timeout();
                 println!("sending again");
-                let last_msg = &self.last_message;
+                let last_meg = self.get_last_message();
                 match last_msg {
                     Some(msg) =>{
                         return Ok(msg.clone())
@@ -584,10 +588,9 @@ impl<T: Peer> ProtocolSession<T> {
             },
             not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
                 // wait
-                let wait_time = time::Duration::from_millis(self.timeout as u64);
-                thread::sleep(wait_time);
+                self.wait_timeout();
                 println!("sending again");
-                let last_msg = &self.last_message;
+                let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) =>{
                         return Ok(msg.clone())
