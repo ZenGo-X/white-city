@@ -61,8 +61,8 @@ struct EddsaPeer{
     pub sigs: HashMap<PeerIdentifier, String>,
     pub capacity: u32,
     pub message: &'static[u8],
-    pub agg_key: Option<KeyAgg>,
-    pub R_tot: Option<GE>,
+    //  pub agg_key: Option<KeyAgg>,
+//    pub R_tot: Option<GE>,
     pub current_step: u32,
     pub ephemeral_key: Option<EphemeralKey>,
 }
@@ -81,7 +81,7 @@ impl EddsaPeer{
     fn add_sig(&mut self, peer_id: PeerIdentifier, sig: String){
         self.sigs.insert(peer_id, sig);
     }
-    fn compute_r_tot(&mut self) {
+    fn compute_r_tot(&mut self) -> GE {
         let mut Ri:Vec<GE> = Vec::new();
         for (peer_id, r) in &self.r_s {
             let r_slice:&str = &r[..];
@@ -89,9 +89,9 @@ impl EddsaPeer{
             Ri.push(_r.R.clone());
         }
         let r_tot= Signature::get_R_tot(Ri);
-        self.R_tot = Some(r_tot);
+        return r_tot;
     }
-    fn aggregate_pks(&mut self) {
+    fn aggregate_pks(&mut self) -> KeyAgg {
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for (peer, pk) in &self.pks {
             pks[(peer - 1) as usize] = pk.clone();
@@ -99,7 +99,7 @@ impl EddsaPeer{
         let peer_id = self.peer_id.clone().into_inner();
         let index = (peer_id - 1) as usize;
         let agg_key= KeyPair::key_aggregation_n(&pks, &index);
-        self.agg_key = Some(agg_key);
+        return agg_key;
     }
     fn validate_commitments(&mut self) -> bool{
         // iterate over all peer Rs
@@ -246,27 +246,24 @@ impl EddsaPeer{
             // commitments sent by others are not valid. exit
             panic!("Commitments not valid!")
         }
-        self.aggregate_pks();
-        self.compute_r_tot();
-        let R_tot = self.R_tot.unwrap_or_else(||{panic!("Didn't compute R_tot!")});
-        self.R_tot.map(|r_tot|{
-            self.agg_key.map(|agg_key|{
-                self.ephemeral_key.map(|eph_key|{
-                    let k = Signature::k(&r_tot, &agg_key.apk, &self.message);
-                    let peer_id = self.peer_id.clone().into_inner();
-                    let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
-                    let _r: SignSecondMsg = serde_json::from_str(&r).unwrap_or_else(|e| {panic!("failed to deserialize R")});
-                    let key = &self.client_key;
+        let agg_key = self.aggregate_pks();
+        let r_tot = self.compute_r_tot();
+        let eph_key = self.ephemeral_key.clone()
+        match eph_key {
+            Some(eph_key) => {
+                let k = Signature::k(&r_tot, &agg_key.apk, &self.message);
+                let peer_id = self.peer_id.clone().into_inner();
+                let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
+                let _r: SignSecondMsg = serde_json::from_str(&r).unwrap_or_else(|e| {panic!("failed to deserialize R")});
+                let key = &self.client_key;
+                // sign
+                let s = Signature::partial_sign(&eph_key.r,key,&k,&agg_key.hash,&r_tot);
+                let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
+                return generate_signature_message_payload(&sig_string)
 
-                    // sign
-                    let s = Signature::partial_sign(&eph_key.r,key,&k,&agg_key.hash,&r_tot);
-                    let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
-
-                    return generate_signature_message_payload(&sig_string)
-                });
-            })
-        });
-        return String::from(relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone());
+            },
+            None => return String::from(relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone())
+        }
 
     }
 
@@ -312,9 +309,9 @@ impl Peer for EddsaPeer{
             capacity,
             message: _message,
             peer_id: RefCell::new(0),
-            agg_key: None,
+           // agg_key: None,
             current_step: 0,
-            R_tot: None,
+            //R_tot: None,
             ephemeral_key: None,
         }
     }
