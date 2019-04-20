@@ -534,8 +534,8 @@ impl<T: Peer> ProtocolSession<T> {
         self.set_bc_dests();
 
         let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(||{panic!("failed to initialize")});
-
-        Ok(self.generate_relay_message(message))
+        self.last_message = Some(self.generate_relay_message(message.clone()));
+        Ok(self.generate_relay_message(message.clone()))
     }
 
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
@@ -543,12 +543,34 @@ impl<T: Peer> ProtocolSession<T> {
             resp if resp == String::from(NOT_YOUR_TURN) => {
                 println!("not my turn");
                 // wait
+
                 let wait_time = time::Duration::from_millis(self.timeout as u64);
                 thread::sleep(wait_time);
                 println!("sending again");
-                let msg = self.last_message.clone().unwrap();
-                //TODO handle None
-                return Ok(msg)
+                let last_msg = self.last_message;
+                match last_msg {
+                    Some(msg) =>{
+                        return Ok(msg.clone())
+                    },
+                    None =>{
+                        panic!("No message to resend");
+                    }
+                }
+            },
+            not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
+                // wait
+                let wait_time = time::Duration::from_millis(self.timeout as u64);
+                thread::sleep(wait_time);
+                println!("sending again");
+                let last_msg = self.last_message;
+                match last_msg {
+                    Some(msg) =>{
+                        return Ok(msg.clone())
+                    },
+                    None =>{
+                        panic!("No message to resend");
+                    }
+                }
             },
             _ => {return Err("error response handling failed")}
         }
