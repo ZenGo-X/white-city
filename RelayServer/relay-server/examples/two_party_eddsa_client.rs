@@ -430,20 +430,9 @@ impl<T: Peer> ProtocolDataManager<T>{
 
     /// Return the next data this peer needs
     /// to send to other peers
-    pub fn get_next_message(&mut self, from: PeerIdentifier, payload: MessagePayload) -> MessagePayload{
+    pub fn get_next_message(&mut self, from: PeerIdentifier, payload: MessagePayload) -> Option<MessagePayload>{
         self.data_holder.update_data(from, payload);
-        self.client_data = self.data_holder.do_step();
-        match self.client_data {
-            Some(ref data) => {
-                self.client_data = None;
-                return String::from(data);
-            },
-            None => {
-                let m = relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone();
-                return String::from(m);
-            }
-        }
-
+        self.data_holder.do_step()
     }
 }
 
@@ -486,8 +475,7 @@ impl<T: Peer> ProtocolSession<T> {
         let relay_msg = msg.relay_message.unwrap();
         let from = relay_msg.peer_number;
         let payload = relay_msg.message;
-        let answer: MessagePayload = self.data_manager.get_next_message(from, payload);
-        return Some(answer);
+        self.data_manager.get_next_message(from, payload)
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
