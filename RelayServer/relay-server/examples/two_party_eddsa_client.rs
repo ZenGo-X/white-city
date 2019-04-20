@@ -84,7 +84,7 @@ impl EddsaPeer{
     fn compute_r_tot(&mut self) {
         let mut Ri:Vec<GE> = Vec::new();
         for (peer_id, r) in &self.r_s {
-            let r_slice:&str = r[..];
+            let r_slice:&str = &r[..];
             let _r:SignSecondMsg = serde_json::from_str(r_slice).unwrap_or_else(|e| {panic!("serialization error")});
             Ri.push(_r.R.clone());
         }
@@ -94,7 +94,7 @@ impl EddsaPeer{
     fn aggregate_pks(&mut self) {
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for (peer, pk) in &self.pks {
-            pks[(peer - 1) as usize] = pk;
+            pks[(peer - 1) as usize] = pk.clone();
         }
         let peer_id = self.peer_id.clone().into_inner();
         let index = (peer_id - 1) as usize;
@@ -259,14 +259,14 @@ impl EddsaPeer{
                     let key = &self.client_key;
 
                     // sign
-                    let s = Signature::partial_sign(&eph_key.r,key,&k,&apk.hash,&r_tot);
+                    let s = Signature::partial_sign(&eph_key.r,key,&k,&agg_key.hash,&r_tot);
                     let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
 
                     return generate_signature_message_payload(&sig_string)
                 });
             })
         });
-        return relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone();
+        return String::from(relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone());
 
     }
 
@@ -375,7 +375,6 @@ impl Peer for EddsaPeer{
         match verify(&signature,&self.message, &apk.apk){
             Ok(_) => Ok(()),
             Err(e) => {
-                let s = String::from(e);
                 Err("Failed to verify")
             }
         }
