@@ -278,7 +278,7 @@ impl EddsaPeer{
 }
 
 impl EddsaPeer{
-    fn resolve_payload_type(message: &MessagePayload) -> MessagePayloadType  {
+    pub fn resolve_payload_type(message: &MessagePayload) -> MessagePayloadType  {
         let msg_payload = message.clone();
 
         let split_msg:Vec<&str> = msg_payload.split(RELAY_MESSAGE_DELIMITER).collect();
