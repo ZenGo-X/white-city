@@ -531,9 +531,8 @@ impl<T: Peer> ProtocolSession<T> {
     fn handle_register_response(&mut self, peer_id: PeerIdentifier) ->Result<ClientMessage, ()>{
         println!("Peer identifier: {}",peer_id);
         // Set the session parameters
-        self.set_bc_dests();
-
         let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(||{panic!("failed to initialize")});
+        self.set_bc_dests();
         self.last_message = Some(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
     }
@@ -547,7 +546,7 @@ impl<T: Peer> ProtocolSession<T> {
                 let wait_time = time::Duration::from_millis(self.timeout as u64);
                 thread::sleep(wait_time);
                 println!("sending again");
-                let last_msg = self.last_message;
+                let last_msg = &self.last_message;
                 match last_msg {
                     Some(msg) =>{
                         return Ok(msg.clone())
@@ -562,7 +561,7 @@ impl<T: Peer> ProtocolSession<T> {
                 let wait_time = time::Duration::from_millis(self.timeout as u64);
                 thread::sleep(wait_time);
                 println!("sending again");
-                let last_msg = self.last_message;
+                let last_msg = &self.last_message;
                 match last_msg {
                     Some(msg) =>{
                         return Ok(msg.clone())
