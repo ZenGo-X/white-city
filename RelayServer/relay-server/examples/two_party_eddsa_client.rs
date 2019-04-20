@@ -337,6 +337,7 @@ impl Peer for EddsaPeer{
                 _=>panic!("Unsupported step")
             }
         }
+	println!("this step is not done yet. no new message.");
         None
     }
 
@@ -431,7 +432,9 @@ impl<T: Peer> ProtocolDataManager<T>{
     /// Return the next data this peer needs
     /// to send to other peers
     pub fn get_next_message(&mut self, from: PeerIdentifier, payload: MessagePayload) -> Option<MessagePayload>{
+println!("updating data");
         self.data_holder.update_data(from, payload);
+println!("doing step");
         self.data_holder.do_step()
     }
 }
@@ -492,8 +495,12 @@ impl<T: Peer> ProtocolSession<T> {
                 println!("Got new relay message");
                 println!("{:?}", msg);
                 let next = self.handle_relay_message(msg.clone());
+
                 match next {
-                    Some(next_msg) => return Some(self.generate_relay_message(next_msg)),
+                    Some(next_msg) => {
+println!("next message to send is {:}", next_msg);
+			return Some(self.generate_relay_message(next_msg))
+		    },
                     None => panic!("Error in handle_relay_message"),
                 }
             },
@@ -537,6 +544,11 @@ impl<T: Peer> ProtocolSession<T> {
         Ok(self.generate_relay_message(message.clone()))
     }
 
+    fn wait_and_get_message(){
+
+    }
+
+    fn update_last_message(){}	
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
         match err_msg{
             resp if resp == String::from(NOT_YOUR_TURN) => {
@@ -689,7 +701,10 @@ fn main() {
                 println!("Got message from server: {:?}", msg);
                 let result = session.generate_client_answer(msg);
                 match result {
-                    Some(msg) => return Ok(msg),
+                    Some(msg) => {
+			println!("Sending {:#?}",msg);
+			return Ok(msg)
+		    },
                     None => return Ok(ClientMessage::new()),
                 }
             }).forward(tx);
