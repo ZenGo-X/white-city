@@ -457,7 +457,7 @@ impl<T: Peer> Client<T> {
             protocol_id,
             last_message: RefCell::new(ClientMessage::new()),
             bc_dests: (1..(capacity+1)).collect(),
-            timeout: 5000,
+            timeout: 10000,
             data_manager: data_m,
         }
     }
@@ -554,6 +554,7 @@ impl<T: Peer> Client<T> {
     }
 
     fn wait_timeout(&self){
+        println!("Waiting timeout..");
         let wait_time = time::Duration::from_millis(self.timeout as u64);
         thread::sleep(wait_time);
     }

@@ -209,7 +209,7 @@ impl RelaySession{
 
         println!("Checking if {:} can relay", msg.peer_number);
         println!("Server state: {:?}", self.state.clone().into_inner());
-        println!("Turn of peer #: {:}", self.protocol.clone().into_inner().turn.clone().into_inner());
+        println!("Turn of peer #: {:}", self.protocol.clone().into_inner().next());
 
         match self.state.clone().into_inner() {
             RelaySessionState::Initialized => {
@@ -331,13 +331,14 @@ impl RelaySession {
                 if sender_index.is_some(){
                     _to.remove(sender_index.unwrap());
                 }
-                self.protocol.clone().into_inner().advance_turn();
+                self.protocol.borrow().advance_turn();
 
-                println!("sending relay message: {:?}", server_msg);
-                println!("sending to: {:?}", _to);
+                //println!("sending relay message: {:?}", server_msg);
+                println!("sending relay message from peer {:?} to: {:?}", peer_id,_to);
             },
             Err(err_msg) => {
                 // send an error response to sender
+                println("{:} can not relay", peer_id);
                 server_msg.response = Some(ServerResponse::ErrorResponse(String::from(err_msg)));
                 _to = vec![peer_id];
             }
