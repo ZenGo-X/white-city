@@ -440,7 +440,7 @@ println!("doing step");
 }
 
 
-struct ProtocolSession<T> where T: Peer{
+struct Client<T> where T: Peer{
     pub registered: bool,
     pub protocol_id: ProtocolIdentifier,
     pub data_manager: ProtocolDataManager<T>,
@@ -450,11 +450,11 @@ struct ProtocolSession<T> where T: Peer{
 }
 
 
-impl<T: Peer> ProtocolSession<T> {
-    pub fn new(protocol_id:ProtocolIdentifier, capacity: u32, message: &'static[u8]) -> ProtocolSession<T>
+impl<T: Peer> Client<T> {
+    pub fn new(protocol_id:ProtocolIdentifier, capacity: u32, message: &'static[u8]) -> Client<T>
     where T: Peer {
         let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity, message);
-        ProtocolSession {
+        Client {
             registered: false,
             protocol_id,
             last_message: RefCell::new(ClientMessage::new()),
@@ -558,13 +558,14 @@ impl<T: Peer> ProtocolSession<T> {
         // Set the session parameters
         let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(||{panic!("failed to initialize")});
         self.set_bc_dests();
+        self.wait_timeout();
         self.last_message.replace(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
     }
 
     fn get_last_message(&self) -> Option<ClientMessage>{
         let last_msg = self.last_message.clone().into_inner();
-        return Some(last_msg.clone()); 
+        return Some(last_msg.clone());
     }
 
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
@@ -700,7 +701,7 @@ fn main() {
     let _tcp = TcpStream::connect(&addr, &handle);
 
 
-    let mut session: ProtocolSession<EddsaPeer> = ProtocolSession::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message_to_sign);
+    let mut session: Client<EddsaPeer> = Client::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message_to_sign);
     let client = _tcp.and_then(|stream| {
         println!("sending register message");
         let framed_stream = stream.framed(ClientToServerCodec::new());
