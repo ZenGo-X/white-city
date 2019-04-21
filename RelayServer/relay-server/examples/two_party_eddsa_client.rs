@@ -448,11 +448,9 @@ struct Client<T> where T: Peer{
     pub bc_dests: Vec<ProtocolIdentifier>,
     pub timeout: u32,
 }
-
-
 impl<T: Peer> Client<T> {
     pub fn new(protocol_id:ProtocolIdentifier, capacity: u32, message: &'static[u8]) -> Client<T>
-    where T: Peer {
+        where T: Peer {
         let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity, message);
         Client {
             registered: false,
@@ -462,19 +460,6 @@ impl<T: Peer> Client<T> {
             timeout: 5000,
             data_manager: data_m,
         }
-    }
-
-    fn set_bc_dests(&mut self){
-        let index = self.data_manager.peer_id.clone().into_inner() - 1;
-        self.bc_dests.remove(index as usize);
-    }
-
-    fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload>{
-        // parse relay message
-        let relay_msg = msg.relay_message.unwrap();
-        let from = relay_msg.peer_number;
-        let payload = relay_msg.message;
-        self.data_manager.get_next_message(from, payload)
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
@@ -488,20 +473,25 @@ impl<T: Peer> Client<T> {
                     Ok(next_msg) => {
                         new_message = Some(next_msg);
                     },
-                    Err(e) => panic!("Error in handle_server_response"),
+                    Err(e) => {
+                        println!("Error in handle_server_response");
+                        None
+                    },
                 }
             },
             ServerMessageType::RelayMessage => {
                 println!("Got new relay message");
                 println!("{:?}", msg);
                 let next = self.handle_relay_message(msg.clone());
-
                 match next {
                     Some(next_msg) => {
                         println!("next message to send is {:}", next_msg);
                         new_message = Some(self.generate_relay_message(next_msg.clone()));
                     },
-                    None => panic!("Error in handle_relay_message"),
+                    None => {
+                        println!("Error in handle_relay_message");
+                        None
+                    },
                 }
             },
             ServerMessageType::Abort => {
@@ -534,6 +524,23 @@ impl<T: Peer> Client<T> {
         msg.register(self.protocol_id.clone(), self.data_manager.capacity.clone());
         msg
     }
+}
+
+impl<T: Peer> Client<T> {
+
+    fn set_bc_dests(&mut self){
+        let index = self.data_manager.peer_id.clone().into_inner() - 1;
+        self.bc_dests.remove(index as usize);
+    }
+
+    fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload>{
+        // parse relay message
+        let relay_msg = msg.relay_message.unwrap();
+        let from = relay_msg.peer_number;
+        let payload = relay_msg.message;
+        self.data_manager.get_next_message(from, payload)
+    }
+
 
     fn generate_relay_message(&self, payload: MessagePayload) -> ClientMessage {
         let msg = ClientMessage::new();
