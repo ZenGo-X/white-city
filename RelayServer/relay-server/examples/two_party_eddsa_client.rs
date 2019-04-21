@@ -490,7 +490,6 @@ impl<T: Peer> Client<T> {
                     },
                     None => {
                         println!("Error in handle_relay_message");
-                        None
                     },
                 }
             },
