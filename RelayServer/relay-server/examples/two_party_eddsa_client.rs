@@ -475,7 +475,6 @@ impl<T: Peer> Client<T> {
                     },
                     Err(e) => {
                         println!("Error in handle_server_response");
-                        None
                     },
                 }
             },
