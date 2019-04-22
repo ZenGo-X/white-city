@@ -291,6 +291,8 @@ impl RelaySession {
             let id = &(peer.peer_id as PeerIdentifier);
             to.contains(id ) && peer.registered
         }).map(|peer|{
+		println!("sending msg to peer {}:",peer.peer_id);
+println!("{:?}",message);
             peer.client.tx.clone().send(message.clone())
         });
 
@@ -338,7 +340,7 @@ impl RelaySession {
             },
             Err(err_msg) => {
                 // send an error response to sender
-                println("{:} can not relay", peer_id);
+                println!("{:} can not relay", peer_id);
                 server_msg.response = Some(ServerResponse::ErrorResponse(String::from(err_msg)));
                 _to = vec![peer_id];
             }
@@ -513,7 +515,7 @@ fn main() {
                     relay_session_inner.abort(addr)
                 },
                 ClientMessageType::Undefined => {
-                    //panic!("Got unknown or empty message");
+                    println!("Got unknown or empty message");
                     Box::new(futures::future::ok(())) // TODO this disconnects?
                 }
             }
@@ -521,7 +523,7 @@ fn main() {
 
         // define future for sending half
         let writer = rx
-            .map_err(|()| unreachable!("rx can't fail"))
+            .map_err(|()|unreachable!("rx can't fail"))
             // fold on a stream (rx) takes an initial value (to_client, a Sink)
             // and run the given closure, for each value passed from the stream (message to send to
             // the client)
@@ -534,12 +536,12 @@ fn main() {
 
         // if any of the reading/writing half is done - the whole connection is finished
         // this makes select a sensible combinator
-        let connection = reader.select(writer);
+        let connection = reader.map_err(|err|{println!("ERROR OCCURED IN READER:{:?}",err);err}).select(writer);
 
         // map & map_err here are used for the case reading half or writing half is dropped
         // in which case we will be dropping the other half as well
         let relay_session_inner = Arc::clone(&relay_session);
-        handle.spawn(connection.map(|_| ()).map_err(|(err, _)| err)
+        handle.spawn(connection.map(|_| ()).map_err(|(err, _)| {println!("ERROR OCCURED: {:?}",err);err})
             .then(move |_| {
                 // connection is closed
                 println!("Disconnected");

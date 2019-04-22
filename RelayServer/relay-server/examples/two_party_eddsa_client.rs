@@ -18,12 +18,17 @@ use std::{thread, time};
 use std::cell::RefCell;
 use std::vec::Vec;
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
+
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use tokio_core::io::Io;
 
 use futures::{Stream, Sink, Future};
 use futures::sync::mpsc;
+use futures::stream;
 
 use relay_server_common::{
     ClientToServerCodec,
@@ -337,7 +342,7 @@ impl Peer for EddsaPeer{
                 _=>panic!("Unsupported step")
             }
         }
-	println!("this step is not done yet. no new message.");
+	//println!("this step is not done yet. no new message.");
         None
     }
 
@@ -432,9 +437,9 @@ impl<T: Peer> ProtocolDataManager<T>{
     /// Return the next data this peer needs
     /// to send to other peers
     pub fn get_next_message(&mut self, from: PeerIdentifier, payload: MessagePayload) -> Option<MessagePayload>{
-println!("updating data");
+//println!("updating data");
         self.data_holder.update_data(from, payload);
-println!("doing step");
+//println!("doing step");
         self.data_holder.do_step()
     }
 }
@@ -479,12 +484,12 @@ impl<T: Peer> Client<T> {
                 }
             },
             ServerMessageType::RelayMessage => {
-                println!("Got new relay message");
-                println!("{:?}", msg);
+        //        println!("Got new relay message");
+//                println!("{:?}", msg);
                 let next = self.handle_relay_message(msg.clone());
                 match next {
                     Some(next_msg) => {
-                        println!("next message to send is {:}", next_msg);
+                        //println!("next message to send is {:}", next_msg);
                         new_message = Some(self.generate_relay_message(next_msg.clone()));
                     },
                     None => {
@@ -493,7 +498,7 @@ impl<T: Peer> Client<T> {
                 }
             },
             ServerMessageType::Abort => {
-                println!("Got abort message");
+      //          println!("Got abort message");
                 //Ok(MessageProcessResult::NoMessage)
                 new_message = Some(ClientMessage::new());
             },
@@ -554,7 +559,7 @@ impl<T: Peer> Client<T> {
     }
 
     fn wait_timeout(&self){
-        println!("Waiting timeout..");
+    //    println!("Waiting timeout..");
         let wait_time = time::Duration::from_millis(self.timeout as u64);
         thread::sleep(wait_time);
     }
@@ -564,7 +569,7 @@ impl<T: Peer> Client<T> {
         // Set the session parameters
         let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(||{panic!("failed to initialize")});
         self.set_bc_dests();
-        self.wait_timeout();
+  //      self.wait_timeout();
         self.last_message.replace(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
     }
@@ -577,10 +582,10 @@ impl<T: Peer> Client<T> {
     fn handle_error_response(&mut self, err_msg: &str) -> Result<ClientMessage, &'static str>{
         match err_msg{
             resp if resp == String::from(NOT_YOUR_TURN) => {
-                println!("not my turn");
+                //println!("not my turn");
                 // wait
-                self.wait_timeout();
-                println!("sending again");
+      //          self.wait_timeout();
+//                println!("sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) =>{
@@ -593,8 +598,8 @@ impl<T: Peer> Client<T> {
             },
             not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
                 // wait
-                self.wait_timeout();
-                println!("sending again");
+            //    self.wait_timeout();
+  //              println!("sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) =>{
@@ -621,7 +626,7 @@ impl<T: Peer> Client<T> {
                     }
                 },
                 ServerResponse::ErrorResponse(err_msg) => {
-                    println!("got error response");
+                  //  println!("got error response");
                     let err_msg_slice: &str = &err_msg[..];
                     let msg = self.handle_error_response(err_msg_slice);
                     match msg {
@@ -706,31 +711,48 @@ fn main() {
     let handle = core.handle();
     let _tcp = TcpStream::connect(&addr, &handle);
 
-
-    let mut session: Client<EddsaPeer> = Client::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message_to_sign);
+    let mut count  =  Arc::new(AtomicUsize::new(0));
+	
+    let mut session: Arc<Mutex<Client<EddsaPeer>>> = Arc::new(Mutex::new(Client::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message_to_sign)));
     let client = _tcp.and_then(|stream| {
-        println!("sending register message");
+        //println!("sending register message");
         let framed_stream = stream.framed(ClientToServerCodec::new());
-
-        let mut msg = session.generate_register_message();
+        let msg = session.lock().unwrap().generate_register_message();
 
 
         // send register message to server
         let send_ = framed_stream.send(msg);
+	let _session_inner = Arc::clone(&session);
+	let count_inner = Arc::clone(&count);
         send_.and_then(|stream| {
             let (tx, rx) = stream.split();
-            let client = rx.and_then(|msg| {
+            let client = rx.and_then(move |msg| {
                 println!("Got message from server: {:?}", msg);
-                let result = session.generate_client_answer(msg);
+		let session_i= session_inner.lock().unwrap();
+		let session_inner = &*session_i;
+                let result = session_inner.generate_client_answer(msg);
+		let c = count.fetch_add(1, Ordering::SeqCst);
+		if session_inner.data_manager.peer_id.clone().into_inner() == 2 && c == 0{
+println!("sleeping extra");
+        let wait_time = time::Duration::from_millis(5000);
+        thread::sleep(wait_time);
+
+	
+		}
+        let wait_time = time::Duration::from_millis(5000);
+        thread::sleep(wait_time);
                 match result {
                     Some(msg) => {
 			println!("Sending {:#?}",msg);
-			return Ok(msg)
+			
+			return Ok(msg);
 		    },
                     None => return Ok(ClientMessage::new()),
                 }
             }).forward(tx);
-            client
+	handle.spawn(client.map(|_|()).map_err(|_|()));
+	Ok(())
+//            client.map_err(|err|{println!("ERROR CLIENT: {:?}",err);err})
         })
     })
         .map_err(|err| {
