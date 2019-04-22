@@ -28,14 +28,17 @@ impl ProtocolDescriptor {
 
     pub fn advance_turn(&self) -> u32 {
         let turn = self.turn.clone().into_inner();
-        self.turn.replace(  (turn + 1) % self.capacity);
+        let peer_number = (turn + 1) % (self.capacity + 1);
+        if peer_number == 0 {
+            self.turn.replace(1);
+        }else { self.turn.replace(peer_number); }
         return self.turn.clone().into_inner();
     }
 
     // get the # of next peer that can send a message
     pub fn next(&self) -> u32 {
         let turn = self.turn.clone().into_inner();
-        return (turn + 1) % self.capacity;
+        turn
     }
 }
 
@@ -44,7 +47,7 @@ impl ProtocolDescriptor{
         ProtocolDescriptor{
             id,
             capacity,
-            turn: RefCell::new(0),
+            turn: RefCell::new(1),
         }
     }
 }
