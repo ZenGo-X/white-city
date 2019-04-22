@@ -444,7 +444,7 @@ impl<T: Peer> ProtocolDataManager<T>{
     }
 }
 
-struct Client_W<T> (RefCell<Client<T>>);
+struct Client_W<T> (RefCell<Client<T>>) where T: Peer;
 
 struct Client<T> where T: Peer{
     pub registered: bool,
@@ -714,33 +714,34 @@ fn main() {
 
     let mut count  =  Arc::new(AtomicUsize::new(0));
 	
-    let mut session: Arc<Mutex<Client_W<EddsaPeer>>> = Arc::new(Mutex::new(Client_W(Client::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message_to_sign))));
+    let mut session: Arc<Mutex<Client_W<EddsaPeer>>> = Arc::new(Mutex::new(Client_W(RefCell::new(Client::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message_to_sign)))));
     let client = _tcp.and_then(|stream| {
         //println!("sending register message");
         let framed_stream = stream.framed(ClientToServerCodec::new());
-        let msg = session.lock().unwrap().get_mut().generate_register_message();
+        let mut session_ = session.lock().unwrap();
+	let msg = session_.0.get_mut().generate_register_message();
 
 
         // send register message to server
         let send_ = framed_stream.send(msg);
-    	let _session_inner = Arc::clone(&session);
+    	let session_inner = Arc::clone(&session);
     	let count_inner = Arc::clone(&count);
         send_.and_then(|stream| {
             let (tx, rx) = stream.split();
             let client = rx.and_then(move |msg| {
                 println!("Got message from server: {:?}", msg);
-                let session_i= session_inner.lock().unwrap();
-                let session_inner = session_i(0).get_mut();
+                let mut session_i= session_inner.lock().unwrap();
+                let session_inner = session_i.0.get_mut();
                 let result = session_inner.generate_client_answer(msg);
                 let c = count.fetch_add(1, Ordering::SeqCst);
 
                 if session_inner.data_manager.peer_id.clone().into_inner() == 2 && c == 0{
                     println!("sleeping extra");
                     let wait_time = time::Duration::from_millis(5000);
-                    thread::sleep(wait_time);
+//                    thread::sleep(wait_time);
                 }
                 let wait_time = time::Duration::from_millis(5000);
-                thread::sleep(wait_time);
+  //              thread::sleep(wait_time);
                 match result {
                     Some(msg) => {
                         println!("Sending {:#?}", msg);
@@ -749,8 +750,8 @@ fn main() {
                     None => return Ok(ClientMessage::new()),
                 }
             }).forward(tx);
-	handle.spawn(client.map(|_|()).map_err(|_|()));
-	Ok(())
+		client
+	
 //            client.map_err(|err|{println!("ERROR CLIENT: {:?}",err);err})
         })
     })

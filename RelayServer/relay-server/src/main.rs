@@ -488,9 +488,10 @@ fn main() {
         // define future for receiving half
         let relay_session_inner = Arc::clone(&relay_session);
         let reader = from_client.for_each(move |msg| {
+	    println!("trying to lock relay_session");	
             let relay_session_i= relay_session_inner.lock().unwrap();
             let relay_session_inner = &*relay_session_i;
-
+	    println!("locked relay_session");	
             println!("got message: {:?}", msg);
             let msg_type = resolve_msg_type(msg.clone());
             println!("message type is {:?}", msg_type);
