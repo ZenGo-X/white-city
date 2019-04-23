@@ -329,10 +329,10 @@ println!("{:?}",message);
             Ok(()) => {
                 server_msg.relay_message = Some(msg.clone());
                 _to = msg.to;
-                let sender_index = _to.iter().position(|x| *x == peer_id);
-                if sender_index.is_some(){
-                    _to.remove(sender_index.unwrap());
-                }
+//                let sender_index = _to.iter().position(|x| *x == peer_id);
+//                if sender_index.is_some(){
+//                    _to.remove(sender_index.unwrap());
+//                }
                 self.protocol.borrow().advance_turn();
 
                 //println!("sending relay message: {:?}", server_msg);

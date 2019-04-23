@@ -70,6 +70,16 @@ struct EddsaPeer{
 //    pub R_tot: Option<GE>,
     pub current_step: u32,
     pub ephemeral_key: Option<EphemeralKey>,
+
+    pub pk_accepted: bool,
+    pub commitment_accepted: bool,
+    pub r_accepted: bool,
+    pub sig_accepted: bool,
+
+    pub pk_msg: Option<MessagePayload>,
+    pub commitment_msg: Option<MessagePayload>,
+    pub r_msg: Option<MessagePayload>,
+    pub sig_msg: Option<MessagePayload>,
 }
 
 //commitment is of type signFirstMessage
@@ -137,6 +147,10 @@ impl EddsaPeer {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::PUBLIC_KEY(pk) => {
+                let peer_id = self.peer_id.clone().into_inner();
+                if from == peer_id {
+                    self.pk_accepted = true;
+                }
                 let s_slice: &str = &pk[..];  // take a full slice of the string
                 let _pk = serde_json::from_str(s_slice);
                 match _pk {
@@ -152,6 +166,10 @@ impl EddsaPeer {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::COMMITMENT(t) => {
+                let peer_id = self.peer_id.clone().into_inner();
+                if from == peer_id {
+                    self.commitment_accepted = true;
+                }
                 self.add_commitment(from, t);
             },
             _ => {}//panic!("expected commitment message")
@@ -162,6 +180,10 @@ impl EddsaPeer {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::R_MESSAGE(r) => {
+                let peer_id = self.peer_id.clone().into_inner();
+                if from == peer_id {
+                    self.r_accepted = true;
+                }
                 self.add_r(from, r);
             },
             _ => {}//panic!("expected R message")
@@ -172,6 +194,10 @@ impl EddsaPeer {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::SIGNATURE(s) => {
+                let peer_id = self.peer_id.clone().into_inner();
+                if from == peer_id {
+                    self.sig_accepted = true;
+                }
                 self.add_sig(from, s);
             },
             _ => {}//panic!("expected signature message")
@@ -209,7 +235,7 @@ impl EddsaPeer {
 impl EddsaPeer{
     /// steps - in each step the client does a calculation on its
     /// data, and updates the data holder with the new data
-    pub fn step_1(&mut self) -> MessagePayload{
+    pub fn step_1(&mut self){
         // each peer computes its commitment to the ephemeral key
         // (this implicitly means each party also calculates ephemeral key
         // on this step)
@@ -227,25 +253,27 @@ impl EddsaPeer{
                 self.add_commitment(peer_id, json_string.clone());
                 let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
                 //let blind_factor = serde_json::to_string(&sign_second_message.blind_factor).expect("Couldn't serialize blind factor");
-                self.add_r(peer_id, r);
-                return generate_commitment_message_payload((&json_string));
+                //self.add_r(peer_id, r);
+                self.commitment_msg = Some(generate_commitment_message_payload((&json_string)));
+                //return self.commitment_msg.clone().unwrap();
             } ,
             Err(e) => panic!("Couldn't serialize commitment")
-        }
+        };
+
     }
-    pub fn step_2(&mut self) -> MessagePayload{
+    pub fn step_2(&mut self) {
         /// step 2 - return the clients R. No extra calculations
         let peer_id = self.peer_id.clone().into_inner();
         let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Didn't compute R")});
-        return generate_R_message_payload(&r);
+        self.r_msg = Some(generate_R_message_payload(&r));
 
     }
     /// step 3 - after validating all commitments:
     /// 1. compute APK
     /// 2. compute R' = sum(Ri)
     /// 3. sign message
-    /// 4. generate (and return) signature message payload
-    pub fn step_3(&mut self) -> MessagePayload{
+    /// 4. generate signature message payload
+    pub fn step_3(&mut self){
 
         if !self.validate_commitments() {
             // commitments sent by others are not valid. exit
@@ -264,10 +292,10 @@ impl EddsaPeer{
                 // sign
                 let s = Signature::partial_sign(&eph_key.r,key,&k,&agg_key.hash,&r_tot);
                 let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
-                return generate_signature_message_payload(&sig_string)
+                self.sig_msg = Some(generate_signature_message_payload(&sig_string));
 
             },
-            None => return String::from(relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone())
+            None => {}//return String::from(relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone())
         }
 
     }
@@ -318,32 +346,43 @@ impl Peer for EddsaPeer{
             current_step: 0,
             //R_tot: None,
             ephemeral_key: None,
+            pk_accepted: false,
+            commitment_accepted: false,
+            r_accepted: false,
+            sig_accepted:false,
+
+            pk_msg: None,
+            commitment_msg: None,
+            r_msg: None,
+            sig_msg: None,
         }
     }
 
     fn zero_step(&mut self, peer_id:PeerIdentifier) -> Option<MessagePayload> {
         self.peer_id.replace(peer_id);
         let pk/*:Ed25519Point */= self.client_key.public_key.clone();
-        self.add_pk(peer_id, pk);
+        //self.add_pk(peer_id, pk);
 
 
         let pk_s = serde_json::to_string(&pk).expect("Failed in serialization");
-        return Some(generate_pk_message_payload(&pk_s));
+
+        self.pk_msg = Some(generate_pk_message_payload(&pk_s));
+        return self.pk_msg.clone();
     }
 
-    fn do_step(&mut self) ->Option<MessagePayload> {
+    fn do_step(&mut self) {
+
         if self.is_step_done() {
             // do the next step
             self.current_step += 1;
             match self.current_step {
-                1 => {return Some(self.step_1())},
-                2 => {return Some(self.step_2())},
-                3 => {return Some(self.step_3())},
+                1 => {self.step_1()},
+                2 => {self.step_2()},
+                3 => {self.step_3()},
                 _=>panic!("Unsupported step")
             }
         }
 	//println!("this step is not done yet. no new message.");
-        None
     }
 
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload){
@@ -389,12 +428,21 @@ impl Peer for EddsaPeer{
         self.is_done_step_3()
     }
 
+    fn get_next_item(&mut self) -> Option<MessagePayload>{
+        if !self.pk_accepted{self.pk_msg}
+        if !self.commitment_accepted{self.commitment_msg}
+        if !self.r_accepted{self.r_msg}
+        if !self.sig_accepted{self.sig_msg}
+        None
+    }
+
 }
 pub trait Peer {
     fn new(capacity: u32, _message: &'static[u8]) -> Self;
     fn zero_step(&mut self, peer_id:PeerIdentifier) -> Option<MessagePayload>;
-    fn do_step(&mut self) ->Option<MessagePayload>;
+    fn do_step(&mut self);
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload);
+    fn get_next_item(&mut self) -> Option<MessagePayload>;
     fn finalize(&mut self) -> Result<(),&'static str>;
     fn is_done(&mut self) -> bool;
 }
@@ -440,7 +488,8 @@ impl<T: Peer> ProtocolDataManager<T>{
 //println!("updating data");
         self.data_holder.update_data(from, payload);
 //println!("doing step");
-        self.data_holder.do_step()
+        self.data_holder.do_step();
+        self.data_holder.get_next_item()
     }
 }
 
@@ -533,8 +582,8 @@ impl<T: Peer> Client<T> {
 impl<T: Peer> Client<T> {
 
     fn set_bc_dests(&mut self){
-        let index = self.data_manager.peer_id.clone().into_inner() - 1;
-        self.bc_dests.remove(index as usize);
+//        let index = self.data_manager.peer_id.clone().into_inner() - 1;
+//        self.bc_dests.remove(index as usize);
     }
 
     fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload>{
