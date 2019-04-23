@@ -154,7 +154,7 @@ impl EddsaPeer {
             MessagePayloadType::COMMITMENT(t) => {
                 self.add_commitment(from, t);
             },
-            _ => panic!("expected commitment message")
+            _ => {}//panic!("expected commitment message")
         }
     }
 
@@ -164,7 +164,7 @@ impl EddsaPeer {
             MessagePayloadType::R_MESSAGE(r) => {
                 self.add_r(from, r);
             },
-            _ => panic!("expected R message")
+            _ => {}//panic!("expected R message")
         }
     }
 
@@ -174,7 +174,7 @@ impl EddsaPeer {
             MessagePayloadType::SIGNATURE(s) => {
                 self.add_sig(from, s);
             },
-            _ => panic!("expected signature message")
+            _ => {}//panic!("expected signature message")
         }
     }
 }
