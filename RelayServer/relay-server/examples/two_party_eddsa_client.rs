@@ -106,16 +106,24 @@ impl EddsaPeer{
         let r_tot= Signature::get_R_tot(Ri);
         return r_tot;
     }
+
     fn aggregate_pks(&mut self) -> KeyAgg {
+        let cap = self.capacity as usize;
+        println!("capacity: {:}",cap);
         let mut pks = Vec::with_capacity(self.capacity as usize);
-        for (peer, pk) in &self.pks {
-            pks[(peer - 1) as usize] = pk.clone();
+        for index in 0..self.capacity{
+            let peer = index + 1;
+            let mut pk = self.pks.get_mut(&peer).unwrap();//_or_else(||{println!("dont have peers pk");});
+            pks.push(pk.clone());
         }
+        println!("# of public keys : {:?}", pks.len());
+        println!("PKS: {:?}", pks);
         let peer_id = self.peer_id.clone().into_inner();
         let index = (peer_id - 1) as usize;
         let agg_key= KeyPair::key_aggregation_n(&pks, &index);
         return agg_key;
     }
+
     fn validate_commitments(&mut self) -> bool{
         // iterate over all peer Rs
         let r_s = &self.r_s;
@@ -127,15 +135,16 @@ impl EddsaPeer{
             let k = self.peer_id.clone().into_inner();
             let cmtmnt = self.commitments.get(&k)
                 .expect("peer didn't send commitment");
+            println!("validating commitment : {:?}", cmtmnt);
             let commitment:SignFirstMsg = serde_json::from_str(cmtmnt).unwrap();
             // if we couldn't validate the commitment - failure
-            if !test_com(
-                &_r.R,
-                &_r.blind_factor,
-                &commitment.commitment
-            ) {
-                return false;
-            }
+//            if !test_com(
+            //&_r.R,
+            //&_r.blind_factor,
+            //  &commitment.commitment
+            //) {
+            //  return false;
+            //}
         }
         true
     }
@@ -147,12 +156,14 @@ impl EddsaPeer {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::PUBLIC_KEY(pk) => {
+
                 let peer_id = self.peer_id.clone().into_inner();
                 if from == peer_id {
                     self.pk_accepted = true;
                 }
                 let s_slice: &str = &pk[..];  // take a full slice of the string
                 let _pk = serde_json::from_str(s_slice);
+                println!("Got peer # {:} pk! {:?}", from, _pk);
                 match _pk {
                     Ok(_pk) => self.add_pk(from, _pk),
                     Err(e) => panic!("Could not serialize public key")
@@ -164,8 +175,10 @@ impl EddsaPeer {
 
     pub fn update_data_step_1(&mut self, from: PeerIdentifier, payload: MessagePayload) {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
+        println!("payload type is {:?}", payload_type);
         match payload_type {
             MessagePayloadType::COMMITMENT(t) => {
+                println!("Got peer # {:} commitment! {:?}", from, t);
                 let peer_id = self.peer_id.clone().into_inner();
                 if from == peer_id {
                     self.commitment_accepted = true;
@@ -191,13 +204,16 @@ impl EddsaPeer {
     }
 
     pub fn update_data_step_3(&mut self, from: PeerIdentifier, payload: MessagePayload) {
+println!("updating data step 3");
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::SIGNATURE(s) => {
+		println!("GOT SIG");
                 let peer_id = self.peer_id.clone().into_inner();
                 if from == peer_id {
                     self.sig_accepted = true;
                 }
+		println!("adding signature");
                 self.add_sig(from, s);
             },
             _ => {}//panic!("expected signature message")
@@ -225,7 +241,13 @@ impl EddsaPeer {
         self.r_s.len() == self.capacity as usize
     }
     pub fn is_done_step_3(&self) -> bool {
-        self.sigs.len() == self.capacity as usize
+	println!("CHECKING IF LAST STEP IS DONE");
+
+        if self.sigs.len() == self.capacity as usize {
+		println!("STEP 3 DONE");
+		return true;
+	}
+	false
     }
     /// Check if peer should finalize the session
     pub fn should_finalize(&mut self)->bool{
@@ -235,7 +257,7 @@ impl EddsaPeer {
 impl EddsaPeer{
     /// steps - in each step the client does a calculation on its
     /// data, and updates the data holder with the new data
-    pub fn step_1(&mut self){
+    pub fn step_1(&mut self) {
         // each peer computes its commitment to the ephemeral key
         // (this implicitly means each party also calculates ephemeral key
         // on this step)
@@ -248,19 +270,19 @@ impl EddsaPeer{
         //let commitment = sign_first_message.commitment;
         // save the commitment
         let peer_id = self.peer_id.clone().into_inner();
-        match serde_json::to_string(&sign_first_message){
-            Ok(json_string) =>{
+        match serde_json::to_string(&sign_first_message) {
+            Ok(json_string) => {
                 self.add_commitment(peer_id, json_string.clone());
                 let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
                 //let blind_factor = serde_json::to_string(&sign_second_message.blind_factor).expect("Couldn't serialize blind factor");
-                //self.add_r(peer_id, r);
+                self.add_r(peer_id, r);
                 self.commitment_msg = Some(generate_commitment_message_payload((&json_string)));
                 //return self.commitment_msg.clone().unwrap();
-            } ,
+            },
             Err(e) => panic!("Couldn't serialize commitment")
-        };
-
+        }
     }
+
     pub fn step_2(&mut self) {
         /// step 2 - return the clients R. No extra calculations
         let peer_id = self.peer_id.clone().into_inner();
@@ -279,11 +301,15 @@ impl EddsaPeer{
             // commitments sent by others are not valid. exit
             panic!("Commitments not valid!")
         }
+        println!("commitments valid");
         let agg_key = self.aggregate_pks();
+        println!("computed agg_key");
         let r_tot = self.compute_r_tot();
+        println!("computed r_tot");
 //       let eph_key = self.ephemeral_key.clone();
         match self.ephemeral_key {
             Some(ref eph_key) => {
+                println!("have eph_key: {:?}",eph_key);
                 let k = Signature::k(&r_tot, &agg_key.apk, &self.message);
                 let peer_id = self.peer_id.clone().into_inner();
                 let r = self.r_s.get(&peer_id).unwrap_or_else(||{panic!("Client has No R ")}).clone();
@@ -321,7 +347,6 @@ impl EddsaPeer{
             },
             r if r == String::from(R_KEY_MESSAGE_PREFIX ) => {
                 return MessagePayloadType::R_MESSAGE(msg_payload);
-
             },
             sig if sig == String::from(SIGNATURE_MESSAGE_PREFIX)=> {
                 return MessagePayloadType ::SIGNATURE(msg_payload);
@@ -342,7 +367,7 @@ impl Peer for EddsaPeer{
             capacity,
             message: _message,
             peer_id: RefCell::new(0),
-           // agg_key: None,
+            // agg_key: None,
             current_step: 0,
             //R_tot: None,
             ephemeral_key: None,
@@ -371,9 +396,11 @@ impl Peer for EddsaPeer{
     }
 
     fn do_step(&mut self) {
-
+        println!("Current step is: {:}", self.current_step);
         if self.is_step_done() {
             // do the next step
+            println!("step done!");
+            println!("doing next step");
             self.current_step += 1;
             match self.current_step {
                 1 => {self.step_1()},
@@ -382,7 +409,7 @@ impl Peer for EddsaPeer{
                 _=>panic!("Unsupported step")
             }
         }
-	//println!("this step is not done yet. no new message.");
+        //println!("this step is not done yet. no new message.");
     }
 
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload){
@@ -429,10 +456,13 @@ impl Peer for EddsaPeer{
     }
 
     fn get_next_item(&mut self) -> Option<MessagePayload>{
-        if !self.pk_accepted{self.pk_msg}
-        if !self.commitment_accepted{self.commitment_msg}
-        if !self.r_accepted{self.r_msg}
-        if !self.sig_accepted{self.sig_msg}
+        println!("current_step: {:}, pk_accepted: {:} commitment_accepted: {:} r_accepted: {:} sig_accepted: {:}",self.current_step,self.pk_accepted,self.commitment_accepted, self.r_accepted, self.sig_accepted);
+        if self.current_step == 0 || !self.pk_accepted{
+            println!("next item is pk: {:?}", self.pk_msg);return self.pk_msg.clone();
+        }
+        if self.current_step == 1 || !self.commitment_accepted{println!("next item is commitment: {:?}", self.commitment_msg);return self.commitment_msg.clone();}
+        if self.current_step == 2 || !self.r_accepted{println!("next item is r: {:?}", self.r_msg);return self.r_msg.clone();}
+        if self.current_step == 3 || !self.sig_accepted{println!("next item is SIG: {:?}", self.sig_msg);return self.sig_msg.clone();}
         None
     }
 
@@ -458,7 +488,7 @@ struct ProtocolDataManager<T: Peer>{
 
 impl<T: Peer> ProtocolDataManager<T>{
     pub fn new(capacity: u32, message:&'static[u8]) -> ProtocolDataManager<T>
-    where T: Peer{
+        where T: Peer{
         ProtocolDataManager {
             peer_id: RefCell::new(0),
             current_step: 0,
@@ -485,7 +515,7 @@ impl<T: Peer> ProtocolDataManager<T>{
     /// Return the next data this peer needs
     /// to send to other peers
     pub fn get_next_message(&mut self, from: PeerIdentifier, payload: MessagePayload) -> Option<MessagePayload>{
-//println!("updating data");
+        //println!("updating data");
         self.data_holder.update_data(from, payload);
 //println!("doing step");
         self.data_holder.do_step();
@@ -526,7 +556,7 @@ impl<T: Peer> Client<T> {
                 let next = self.handle_server_response(&msg);
                 match next {
                     Ok(next_msg) => {
-                        new_message = Some(next_msg);
+                        new_message = Some(next_msg.clone());
                     },
                     Err(e) => {
                         println!("Error in handle_server_response");
@@ -534,7 +564,7 @@ impl<T: Peer> Client<T> {
                 }
             },
             ServerMessageType::RelayMessage => {
-        //        println!("Got new relay message");
+                //        println!("Got new relay message");
 //                println!("{:?}", msg);
                 let next = self.handle_relay_message(msg.clone());
                 match next {
@@ -548,7 +578,7 @@ impl<T: Peer> Client<T> {
                 }
             },
             ServerMessageType::Abort => {
-      //          println!("Got abort message");
+                println!("Got abort message");
                 //Ok(MessageProcessResult::NoMessage)
                 new_message = Some(ClientMessage::new());
             },
@@ -558,17 +588,22 @@ impl<T: Peer> Client<T> {
             }
         };
         if last_message.is_empty() {
+            println!("sending clients first message. {:#?}", new_message);
             match new_message{
                 Some(msg) => {
                     self.last_message.replace(msg.clone());
                     return Some(msg.clone());
                 },
-                None => return None
+                None => return None,
             }
         } else {
-            let _last_msg = last_message.clone();
-            self.last_message.replace(new_message.unwrap());
-            return Some(_last_msg);
+            let _new_message = new_message.clone().unwrap();
+            if !last_message.are_equal_payloads(&_new_message){
+                println!("last message changed");
+                self.last_message.replace(_new_message.clone());
+            }
+//            println!("client answer generated: {:?}", self.last_message.clone());
+            return Some(self.last_message.clone().into_inner());
         }
     }
 
@@ -590,6 +625,9 @@ impl<T: Peer> Client<T> {
         // parse relay message
         let relay_msg = msg.relay_message.unwrap();
         let from = relay_msg.peer_number;
+        if from == self.data_manager.peer_id.clone().into_inner(){
+            println!("message accepted \n {:#?}", relay_msg);
+        }
         let payload = relay_msg.message;
         self.data_manager.get_next_message(from, payload)
     }
@@ -609,7 +647,7 @@ impl<T: Peer> Client<T> {
     }
 
     fn wait_timeout(&self){
-    //    println!("Waiting timeout..");
+        //    println!("Waiting timeout..");
         let wait_time = time::Duration::from_millis(self.timeout as u64);
         thread::sleep(wait_time);
     }
@@ -619,8 +657,8 @@ impl<T: Peer> Client<T> {
         // Set the session parameters
         let message =  self.data_manager.initialize_data(peer_id).unwrap_or_else(||{panic!("failed to initialize")});
         self.set_bc_dests();
-  //      self.wait_timeout();
-        self.last_message.replace(self.generate_relay_message(message.clone()));
+        //      self.wait_timeout();
+        // self.last_message.replace(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
     }
 
@@ -634,12 +672,12 @@ impl<T: Peer> Client<T> {
             resp if resp == String::from(NOT_YOUR_TURN) => {
                 //println!("not my turn");
                 // wait
-      //          self.wait_timeout();
+                //          self.wait_timeout();
 //                println!("sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) =>{
-                        return Ok(msg.clone())
+                        return Ok(msg.clone());
                     },
                     None =>{
                         panic!("No message to resend");
@@ -648,19 +686,19 @@ impl<T: Peer> Client<T> {
             },
             not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
                 // wait
-            //    self.wait_timeout();
-  //              println!("sending again");
+                //    self.wait_timeout();
+                //              println!("sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) =>{
-                        return Ok(msg.clone())
+                        return Ok(msg.clone());
                     },
                     None =>{
                         panic!("No message to resend");
                     }
                 }
             },
-            _ => {return Err("error response handling failed")}
+            _ => {println!("didn't handle error correctly");return Err("error response handling failed");}
         }
     }
 
@@ -671,26 +709,29 @@ impl<T: Peer> Client<T> {
                 ServerResponse::Register(peer_id) => {
                     let client_message = self.handle_register_response(peer_id);
                     match client_message{
-                        Ok(_msg) => return Ok(_msg),
-                        Err(e) => return Ok(ClientMessage::new()),
+                        Ok(_msg) => {
+                            println!("our register response: {:?}", _msg);
+                            return Ok(_msg.clone());
+                        },
+                        Err(e) => {println!("error occured");return Ok(ClientMessage::new())},
                     }
                 },
                 ServerResponse::ErrorResponse(err_msg) => {
-                  //  println!("got error response");
+                    //  println!("got error response");
                     let err_msg_slice: &str = &err_msg[..];
                     let msg = self.handle_error_response(err_msg_slice);
                     match msg {
                         Ok(_msg) => return Ok(_msg),
-                        Err(e) => return Ok(ClientMessage::new()),
+                        Err(e) => {println!("error occured");return Ok(ClientMessage::new())},
                     }
                 },
-                ServerResponse::GeneralResponse(msg) => {
-                    unimplemented!()
-                },
+                // ServerResponse::GeneralResponse(msg) => {
+                //     unimplemented!()
+                //   },
                 ServerResponse::NoResponse => {
                     unimplemented!()
                 },
-                _ => panic!("failed to register")
+                _ => panic!("failed to handle response")
             }
     }
 
@@ -726,7 +767,7 @@ pub enum MessageProcessResult {
 }
 
 
-
+#[derive(Debug)]
 enum MessagePayloadType {
     /// Types of expected relay messages
     /// for step 0 we expect PUBLIC_KEY_MESSAGE
@@ -762,45 +803,46 @@ fn main() {
     let _tcp = TcpStream::connect(&addr, &handle);
 
     let mut count  =  Arc::new(AtomicUsize::new(0));
-	
+
     let mut session: Arc<Mutex<Client_W<EddsaPeer>>> = Arc::new(Mutex::new(Client_W(RefCell::new(Client::new(PROTOCOL_IDENTIFIER_ARG, PROTOCOL_CAPACITY_ARG, &message_to_sign)))));
     let client = _tcp.and_then(|stream| {
         //println!("sending register message");
         let framed_stream = stream.framed(ClientToServerCodec::new());
         let mut session_ = session.lock().unwrap();
-	let msg = session_.0.get_mut().generate_register_message();
+        let msg = session_.0.get_mut().generate_register_message();
 
 
         // send register message to server
         let send_ = framed_stream.send(msg);
-    	let session_inner = Arc::clone(&session);
-    	let count_inner = Arc::clone(&count);
+        let session_inner = Arc::clone(&session);
+        let count_inner = Arc::clone(&count);
         send_.and_then(|stream| {
             let (tx, rx) = stream.split();
             let client = rx.and_then(move |msg| {
-                println!("Got message from server: {:?}", msg);
+//                println!("Got message from server: {:?}", msg);
                 let mut session_i= session_inner.lock().unwrap();
                 let session_inner = session_i.0.get_mut();
                 let result = session_inner.generate_client_answer(msg);
                 let c = count.fetch_add(1, Ordering::SeqCst);
 
                 if session_inner.data_manager.peer_id.clone().into_inner() == 2 && c == 0{
-                    println!("sleeping extra");
+                    //                  println!("sleeping extra");
                     let wait_time = time::Duration::from_millis(5000);
 //                    thread::sleep(wait_time);
                 }
                 let wait_time = time::Duration::from_millis(5000);
-  //              thread::sleep(wait_time);
+                //              thread::sleep(wait_time);
                 match result {
-                    Some(msg) => {
-                        println!("Sending {:#?}", msg);
-                        return Ok(msg);
+                    Some(_msg) => {
+                        //      println!("Sending {:#?}", msg);
+                        thread::sleep(wait_time);
+                        return Ok(_msg);
                     },
                     None => return Ok(ClientMessage::new()),
                 }
-            }).forward(tx);
-		client
-	
+            }).and_then(|m|{println!("sending data ! {:?}",m);Ok(m)}).forward(tx);
+            client
+
 //            client.map_err(|err|{println!("ERROR CLIENT: {:?}",err);err})
         })
     })

@@ -138,6 +138,7 @@ impl RelaySession{
         let _addr = &addr;
         let number_of_active_peers = self.peers.borrow().values().filter(|p| p.registered).fold(0, |acc, _| acc + 1);
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
+	println!("-----------------\nPEERS: {:?}\n---------------",self.peers);
         match self.can_register(_addr, protocol_descriptor){
             true => {
 
@@ -147,7 +148,6 @@ impl RelaySession{
                 // activate this connection as a peer
                 peer.registered = true;
                 peer.peer_id = number_of_active_peers + 1;
-
                 // if needed, set the ProtocolDescriptor for this sessuib
                 // and change the state
                 match self.state.clone().into_inner() {
@@ -487,12 +487,13 @@ fn main() {
 
         // define future for receiving half
         let relay_session_inner = Arc::clone(&relay_session);
-        let reader = from_client.for_each(move |msg| {
-	    println!("trying to lock relay_session");	
+	
+        let reader = from_client.or_else(|e|{println!("reader got an error: {:}",e);/*resolve_msg_type(e);*/Err(e)}).for_each(move |msg| {
+	    println!("trying to lock relay_session");
             let relay_session_i= relay_session_inner.lock().unwrap();
             let relay_session_inner = &*relay_session_i;
-	    println!("locked relay_session");	
-            println!("got message: {:?}", msg);
+	    //println!("locked relay_session");
+
             let msg_type = resolve_msg_type(msg.clone());
             println!("message type is {:?}", msg_type);
 
@@ -559,5 +560,6 @@ fn main() {
     // execute server
     core.run(srv).unwrap();
 }
+
 
 

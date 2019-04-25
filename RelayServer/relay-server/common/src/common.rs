@@ -35,5 +35,5 @@ pub fn generate_R_message_payload(r: &String) -> MessagePayload {
 }
 
 pub fn generate_signature_message_payload(sig: &String) -> MessagePayload{
-    return format!("{prefix}{message}", prefix=SIGNATURE_MESSAGE_PREFIX, message=sig.clone());
+    return format!("{prefix}{delimiter}{message}", prefix=SIGNATURE_MESSAGE_PREFIX,delimiter=RELAY_MESSAGE_DELIMITER, message=sig.clone());
 }
