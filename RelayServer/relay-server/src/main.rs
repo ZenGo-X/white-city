@@ -488,7 +488,10 @@ fn main() {
         // define future for receiving half
         let relay_session_inner = Arc::clone(&relay_session);
 	
-        let reader = from_client.or_else(|e|{println!("reader got an error: {:}",e);/*resolve_msg_type(e);*/Err(e)}).for_each(move |msg| {
+        let reader = from_client.or_else(|e|{
+		println!("error in SplitStream: {:?}",e);
+		Err(e)
+	  }).for_each(move |msg| {
 	    println!("trying to lock relay_session");
             let relay_session_i= relay_session_inner.lock().unwrap();
             let relay_session_inner = &*relay_session_i;
@@ -538,7 +541,7 @@ fn main() {
 
         // if any of the reading/writing half is done - the whole connection is finished
         // this makes select a sensible combinator
-        let connection = reader.map_err(|err|{println!("ERROR OCCURED IN READER:{:?}",err);err}).select(writer);
+        let connection = reader./*map_err(|err|{println!("ERROR OCCURED IN READER:{:?}",err);err}).*/select(writer);
 
         // map & map_err here are used for the case reading half or writing half is dropped
         // in which case we will be dropping the other half as well

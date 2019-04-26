@@ -39,6 +39,7 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
 
     fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<Self::In>> {
         // Make sure we have at least the 2 u16 bytes we need.
+	println!("DECODING {:?}",buf);
         let msg_size = match buf.as_ref().read_u16::<BigEndian>() {
             Ok(msg_size) => msg_size,
             Err(_) => return Ok(None),
@@ -59,14 +60,15 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
 
         // Decode!
         let msg: In = serde_json::from_slice(msg_buf)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+            .map_err(|err| {println!("decode error");io::Error::new(io::ErrorKind::InvalidData, err)})?;
         Ok(Some(msg))
     }
 
     fn encode(&mut self, msg: Out, buf: &mut Vec<u8>) -> io::Result<()> {
         // Encode directly into `buf`.
+//	println!("ENCODING {:?}", buf);
         serde_json::to_writer(buf, &msg)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+            .map_err(|err| {println!("ENCODING ERROR");io::Error::new(io::ErrorKind::InvalidData, err)})?;
 
         let len = buf.len() as u16;
 

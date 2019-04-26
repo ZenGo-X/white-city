@@ -818,11 +818,15 @@ fn main() {
         let count_inner = Arc::clone(&count);
         send_.and_then(|stream| {
             let (tx, rx) = stream.split();
-            let client = rx.and_then(move |msg| {
-//                println!("Got message from server: {:?}", msg);
+            let client = rx.then(move |msg| {
+//                println!("Got message; from server: {:?}", msg);
                 let mut session_i= session_inner.lock().unwrap();
                 let session_inner = session_i.0.get_mut();
-                let result = session_inner.generate_client_answer(msg);
+		if msg.is_err(){
+			println!("got error instead of message from server");
+			return Ok(ClientMessage::new());
+		}
+                let result = session_inner.generate_client_answer(msg.unwrap());
                 let c = count.fetch_add(1, Ordering::SeqCst);
 
                 if session_inner.data_manager.peer_id.clone().into_inner() == 2 && c == 0{
@@ -835,12 +839,20 @@ fn main() {
                 match result {
                     Some(_msg) => {
                         //      println!("Sending {:#?}", msg);
-                        thread::sleep(wait_time);
+                        //thread::sleep(wait_time);
                         return Ok(_msg);
                     },
                     None => return Ok(ClientMessage::new()),
                 }
-            }).and_then(|m|{println!("sending data ! {:?}",m);Ok(m)}).forward(tx);
+            }).then(|msg|{
+		    match msg{
+			Ok(x) => {
+				println!("forwarding {:?}",x);
+				Ok(x)
+			},
+			Err(e) => {Err(e)}	
+	       	    }
+		}).forward(tx);
             client
 
 //            client.map_err(|err|{println!("ERROR CLIENT: {:?}",err);err})
@@ -858,4 +870,5 @@ fn main() {
     core.run(client);//.unwrap();
 
 }
+
 
