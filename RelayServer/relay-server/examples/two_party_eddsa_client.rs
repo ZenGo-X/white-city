@@ -617,6 +617,7 @@ impl<T: Peer> Client<T> {
                 println!("last message changed");
                 self.last_message.replace(_new_message.clone());
             }
+            self.wait_timeout();
             return Some(self.last_message.clone().into_inner());
         }
     }
