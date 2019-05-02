@@ -143,7 +143,7 @@ impl EddsaPeer{
             let _r:SignSecondMsg = serde_json::from_str(r).unwrap();
 
             // get the corresponding commitment
-            let k = self.peer_id.clone().into_inner();
+            let k = peer_id.clone();
             let cmtmnt = self.commitments.get(&k)
                 .expect("peer didn't send commitment");
             println!("validating commitment : {:?}", cmtmnt);
