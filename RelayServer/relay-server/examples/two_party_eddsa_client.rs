@@ -416,7 +416,9 @@ impl Peer for EddsaPeer{
                 _ => panic!("Unsupported step")
             }
         }
-        println!("step not done");
+        else {
+            println!("step not done");
+        }
     }
 
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload){
