@@ -60,33 +60,44 @@ use dict::{ Dict, DictIface };
 use std::collections::HashMap;
 
 struct EddsaPeer{
+    // this peers identifier in this session
     pub peer_id: RefCell<PeerIdentifier>,
+    // # of participants
+    pub capacity: u32,
+
+    pub current_step: u32,
+    // is peer done with all calculations
+    pub is_done: bool,
+
+    // eddsa data
     pub client_key: KeyPair,
     pub pks: HashMap<PeerIdentifier, Ed25519Point>,
     pub commitments: HashMap<PeerIdentifier, String>,
     pub r_s: HashMap<PeerIdentifier, String>,
     pub sigs: HashMap<PeerIdentifier, String>,
-    pub capacity: u32,
-    pub message: &'static[u8],
-    //  pub agg_key: Option<KeyAgg>,
-//    pub R_tot: Option<GE>,
-    pub current_step: u32,
     pub ephemeral_key: Option<EphemeralKey>,
+    // message to sign
+    pub message: &'static[u8],
 
+    pub agg_key: Option<KeyAgg>,
+    pub R_tot: Option<GE>,
+
+    // indicators for which of this peers messages were accepted
     pub pk_accepted: bool,
     pub commitment_accepted: bool,
     pub r_accepted: bool,
     pub sig_accepted: bool,
 
+    // messages this peer generates
     pub pk_msg: Option<MessagePayload>,
     pub commitment_msg: Option<MessagePayload>,
     pub r_msg: Option<MessagePayload>,
     pub sig_msg: Option<MessagePayload>,
 }
 
-//commitment is of type signFirstMessage
-// R is of type signSecondMessage
+
 impl EddsaPeer{
+    /// inner calculations & data manipulations
     fn add_pk(&mut self, peer_id: PeerIdentifier, pk: Ed25519Point){
         self.pks.insert(peer_id, pk);
     }
@@ -108,7 +119,6 @@ impl EddsaPeer{
         let r_tot= Signature::get_R_tot(Ri);
         return r_tot;
     }
-
     fn aggregate_pks(&mut self) -> KeyAgg {
         let cap = self.capacity as usize;
         println!("capacity: {:}",cap);
@@ -125,7 +135,6 @@ impl EddsaPeer{
         let agg_key= KeyPair::key_aggregation_n(&pks, &index);
         return agg_key;
     }
-
     fn validate_commitments(&mut self) -> bool{
         // iterate over all peer Rs
         let r_s = &self.r_s;
@@ -361,14 +370,15 @@ impl Peer for EddsaPeer{
             capacity,
             message: _message,
             peer_id: RefCell::new(0),
-            // agg_key: None,
+            agg_key: None,
             current_step: 0,
-            //R_tot: None,
+            R_tot: None,
             ephemeral_key: None,
             pk_accepted: false,
             commitment_accepted: false,
             r_accepted: false,
             sig_accepted:false,
+            is_done: false,
 
             pk_msg: None,
             commitment_msg: None,
