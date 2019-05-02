@@ -1,8 +1,7 @@
 #![feature(refcell_replace_swap)]
 ///
 /// Implementation of a client that communicates with the relay server
-/// this implememnataion is simplistic and used for POC and development and debugging of the
-/// server
+/// This client represents eddsa peer
 ///
 ///
 extern crate futures;
@@ -120,8 +119,8 @@ impl EddsaPeer{
         return r_tot;
     }
     fn aggregate_pks(&mut self) -> KeyAgg {
+	println!("aggregating pks");
         let cap = self.capacity as usize;
-        println!("capacity: {:}",cap);
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for index in 0..self.capacity{
             let peer = index + 1;
@@ -129,16 +128,19 @@ impl EddsaPeer{
             pks.push(pk.clone());
         }
         println!("# of public keys : {:?}", pks.len());
-        println!("PKS: {:?}", pks);
         let peer_id = self.peer_id.clone().into_inner();
         let index = (peer_id - 1) as usize;
         let agg_key= KeyPair::key_aggregation_n(&pks, &index);
         return agg_key;
     }
+
     fn validate_commitments(&mut self) -> bool{
         // iterate over all peer Rs
+	println!("----------\nvalidating commitments\n----------");
         let r_s = &self.r_s;
         for (peer_id, r) in  r_s{
+	    println!("peer: {:}", peer_id);
+	    println!("r: {:}", r);
             // convert the json_string to a construct
             let _r:SignSecondMsg = serde_json::from_str(r).unwrap();
 
@@ -146,17 +148,18 @@ impl EddsaPeer{
             let k = peer_id.clone();
             let cmtmnt = self.commitments.get(&k)
                 .expect("peer didn't send commitment");
-            println!("validating commitment : {:?}", cmtmnt);
+            println!("commitment : {:?}", cmtmnt);
             let commitment:SignFirstMsg = serde_json::from_str(cmtmnt).unwrap();
             // if we couldn't validate the commitment - failure
-//            if !test_com(
+            //if !test_com(
             //&_r.R,
             //&_r.blind_factor,
-            //  &commitment.commitment
+            //&commitment.commitment
             //) {
-            //  return false;
+            // return false;
             //}
         }
+	println!("----------\ncommitments valid\n----------");
         true
     }
 }
@@ -234,10 +237,10 @@ impl EddsaPeer {
 impl EddsaPeer {
     fn is_step_done(&mut self) -> bool {
         match self.current_step {
-            0 => return self.is_done_step_0(),//from, payload), // in step 0 we move immediately to step 1
-            1 => return self.is_done_step_1(),//from, payload),
-            2 => return self.is_done_step_2(),//from, payload),
-            3 => return self.is_done_step_3(),//from, payload),
+            0 => return self.is_done_step_0(),
+            1 => return self.is_done_step_1(),
+            2 => return self.is_done_step_2(),
+            3 => return self.is_done_step_3(),
             _ => panic!("Unsupported step")
         }
     }
@@ -282,7 +285,7 @@ impl EddsaPeer{
         let peer_id = self.peer_id.clone().into_inner();
         match serde_json::to_string(&sign_first_message) {
             Ok(json_string) => {
-                self.add_commitment(peer_id, json_string.clone());
+//                self.add_commitment(peer_id, json_string.clone());
                 let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
                 self.commitment_msg = Some(generate_commitment_message_payload((&json_string)));
                 self.r_msg = Some(generate_R_message_payload(&r));
@@ -343,16 +346,16 @@ impl EddsaPeer{
         match msg_prefix {
 
             pk_prefix if pk_prefix == String::from(PK_MESSAGE_PREFIX)=> {
-                return MessagePayloadType ::PUBLIC_KEY(msg_payload);
+                return MessagePayloadType::PUBLIC_KEY(msg_payload);
             },
             cmtmnt if cmtmnt == String::from(COMMITMENT_MESSAGE_PREFIX) => {
-                return MessagePayloadType ::COMMITMENT(msg_payload);
+                return MessagePayloadType::COMMITMENT(msg_payload);
             },
             r if r == String::from(R_KEY_MESSAGE_PREFIX ) => {
                 return MessagePayloadType::R_MESSAGE(msg_payload);
             },
             sig if sig == String::from(SIGNATURE_MESSAGE_PREFIX)=> {
-                return MessagePayloadType ::SIGNATURE(msg_payload);
+                return MessagePayloadType::SIGNATURE(msg_payload);
             },
             _ => panic!("Unknown relay message prefix")
         }
@@ -803,7 +806,7 @@ fn main() {
     let PROTOCOL_CAPACITY_ARG = 2 as ProtocolIdentifier;
 
     let mut args = env::args().skip(1).collect::<Vec<_>>();
-    // Parse what address we're going to co nnect to
+    // Parse what address we're going to connect to
     let addr = args.first().unwrap_or_else(|| {
         panic!("this program requires at least one argument")
     });

@@ -38,42 +38,15 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
     type In = In;
     type Out = Out;
 
-//    fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<Self::In>> {
-//        // Make sure we have at least the 2 u16 bytes we need.
-//	println!("DECODING {:?}",buf);
-//        let msg_size = match buf.as_ref().read_u16::<BigEndian>() {
-//            Ok(msg_size) => msg_size,
-//            Err(_) => return Ok(None),
-//        };
-//        let hdr_size = mem::size_of_val(&msg_size);
-//        let msg_size = msg_size as usize + hdr_size;
-//
-//        // Make sure our buffer has all the bytes indicated by msg_size.
-//        if buf.len() < msg_size {
-//            return Ok(None);
-//        }
-//
-//        // Drain off the entire message.
-//        let buf = buf.drain_to(msg_size);
-//
-//        // Trim off the u16 length bytes.
-//        let msg_buf = &buf.as_ref()[hdr_size..];
-//
-//        // Decode!
-//        let msg: In = serde_json::from_slice(msg_buf)
-//            .map_err(|err| {println!("decode error: {:?}",err);io::Error::new(io::ErrorKind::InvalidData, err)})?;
-//        Ok(Some(msg))
-//    }
-
     fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<Self::In>> {
         // Make sure we have at least the 2 u16 bytes we need.
         let mut c_buf = buf.clone();
-        println!("DECODING {:?}",buf);
+        //println!("DECODING {:?}",buf);
         let msg_size = match buf.as_ref().read_u16::<BigEndian>() {
             Ok(msg_size) => msg_size,
             Err(_) => return Ok(None),
         };
-        println!("Message size is {:?}", msg_size);
+//        println!("Message size is {:?}", msg_size);
         let hdr_size = mem::size_of_val(&msg_size);
         let msg_size = msg_size as usize + hdr_size;
 
