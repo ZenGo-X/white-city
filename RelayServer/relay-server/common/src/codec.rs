@@ -68,11 +68,12 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
     fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<Self::In>> {
         // Make sure we have at least the 2 u16 bytes we need.
         let mut c_buf = buf.clone();
-        //println!("DECODING {:?}",buf);
+        println!("DECODING {:?}",buf);
         let msg_size = match buf.as_ref().read_u16::<BigEndian>() {
             Ok(msg_size) => msg_size,
             Err(_) => return Ok(None),
         };
+        println!("Message size is {:?}", msg_size);
         let hdr_size = mem::size_of_val(&msg_size);
         let msg_size = msg_size as usize + hdr_size;
 
@@ -93,11 +94,16 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
         match msg {
             Ok(msg) => { Ok(Some(msg))},
             Err(e) => {
-
-                let len = c_buf.len() / 2;
-                let element_size = c_buf.clone().as_slice()[3] as usize;
-                let mut smaller_buf = c_buf.drain_to( element_size + 4);
-                smaller_buf.drain_to(2);
+                let header_bytes = c_buf.drain_to(2);
+                let element_size = match c_buf.as_ref().read_u16::<BigEndian>() {
+                    Ok(msg_size) => msg_size,
+                    Err(_) => return Ok(None),
+                };
+                //let element_size = c_buf.clone().as_slice()[3] as usize;
+                let mut smaller_buf = c_buf.drain_to( element_size as usize + 2);
+                //smaller_buf.drain_to(2);
+                /// Afterwards `self` contains elements `[at, len)`, and the returned `EasyBuf`
+                /// contains elements `[0, at)`.
                 //println!("attempting to decode smaller buf:");
                // println!("-------------\n{:#?}\n-------------",smaller_buf);
                 // Make sure we have at least the 2 u16 bytes we need.
