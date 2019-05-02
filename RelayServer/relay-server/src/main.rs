@@ -15,7 +15,10 @@
 extern crate futures;
 extern crate tokio_core;
 extern crate relay_server_common;
+extern crate chrono;
 
+
+use chrono::prelude::*;
 
 use std::env;
 
@@ -291,8 +294,8 @@ impl RelaySession {
             let id = &(peer.peer_id as PeerIdentifier);
             to.contains(id ) && peer.registered
         }).map(|peer|{
-		println!("sending msg to peer {}:",peer.peer_id);
-println!("{:?}",message);
+		println!("{}: sending msg to peer {}:", Local::now(),peer.peer_id);
+        println!("{:?}",message);
             peer.client.tx.clone().send(message.clone())
         });
 
@@ -488,17 +491,11 @@ fn main() {
         // define future for receiving half
         let relay_session_inner = Arc::clone(&relay_session);
 	
-        let reader = from_client.or_else(|e|{
-		println!("error in SplitStream: {:?}",e);
-		Err(e)
-	  }).for_each(move |msg| {
-	    println!("trying to lock relay_session");
+        let reader = from_client.for_each(move |msg| {
             let relay_session_i= relay_session_inner.lock().unwrap();
             let relay_session_inner = &*relay_session_i;
-	    //println!("locked relay_session");
 
             let msg_type = resolve_msg_type(msg.clone());
-            println!("message type is {:?}", msg_type);
 
             // this is our main logic for receiving messages from peer
             match msg_type {
@@ -521,7 +518,7 @@ fn main() {
                 },
                 ClientMessageType::Undefined => {
                     println!("Got unknown or empty message");
-                    Box::new(futures::future::ok(())) // TODO this disconnects?
+                    relay_session_inner.abort(addr)//Box::new(futures::future::ok(())) // TODO this disconnects?
                 }
             }
         });

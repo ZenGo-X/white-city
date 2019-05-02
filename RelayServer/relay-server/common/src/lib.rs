@@ -120,13 +120,13 @@ impl ServerMessage {
 
 #[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub struct ClientMessage {
-   // #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub register: Option<RegisterMessage>,
 
-    //#[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub abort: Option<AbortMessage>,
 
-    //#[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub relay_message: Option<RelayMessage>
 
 }
