@@ -1,14 +1,20 @@
 # white-city
-Network layer for sMPC (Secure Multi-Party Computation) protocols 
-### Goal: 
-Build an API for a p2p network that will let the protocol implementor easy network integration for his MPC protocol. 
+API to integrate distributed network for secure computation protocols. 
+### Background
+Multi Party Computation can be identified as specific type of distributed computation. MPC communication models require use of concepts such as Termination, Rounds, Broadcast channel, p2p channel and so on. The need for this API came to us at KZen since we work with multiple MPC algorithms and we couldn't find a robust and easy to plug into distributed network layer that answer the specific needs of MPC protocols. We aimed to create a unified API that enjoys best practices and tools of distributed network technologies such as consensus, fault tolerance and more. We believe this framework can be of use to other MPC implementors and therefore we are building it in modular way to answer all types of MPC use cases. 
 ### Project Status: 
-The project is moving on multiple fronts
-- **Multi-party-eddsa:** a server-client web framework based on [Rocket](https://rocket.rs/) with a client running [multi party eddsa](https://github.com/KZen-networks/multi-party-eddsa/wiki/Aggregated-Ed25519-Signatures) as an example. code:  [pg-eddsa-client](https://github.com/KZen-networks/white-city/tree/master/playground/pg-eddsa-client) , [rocket-server](https://github.com/KZen-networks/white-city/tree/master/playground/rocket_server). This is a playground proejct for fast testing various concepts. 
-- **Server-relay:** a low level server-client framework based on [Tokio](https://tokio.rs/). This framework will enable a transition to a full p2p network. Currently WIP, there is a chat-like [application](https://github.com/KZen-networks/white-city/blob/master/RelayServer/relay-server/src/main.rs) to transfer messages between peers in a round robin based fasion. 
-- **Formal-spec:** This is an attempt to capture MPC protocols network layer as a distributed system. Currently there is a [TLA+ spec](https://github.com/KZen-networks/white-city/tree/master/RelayServer/TLA%2B) and equivalent [Coq spec](https://github.com/KZen-networks/white-city/tree/master/RelayServer/coq) of the Server-relay 
-### Reference implementations: 
-1. **Bar Ilan::ACP** - https://github.com/cryptobiu/ACP. Network is based on proxy.
-2. **EPFL::DEDIS** - https://dedis.epfl.ch/ and specifcally https://github.com/dedis/onet
-3. **KULeuven-COSIC::Scale-Mamba** - https://github.com/KULeuven-COSIC/SCALE-MAMBA
-4. **aicis::fresco** - https://github.com/aicis/fresco
+The current stage is focused on the idea of replicated state machine. The repo contain two proof of concepts for centralized state machine where a centralized server is maintaining a state of the protocol and parties are client reading and writing to the state. This gives a few benefits over message passing system: Clients can have down time and the protocol can run more offline. The Server is however a single point of failure. Replicated state machine idea will replace the single server with multiple servers running consensus protocols to maintaing the state. 
+- **[TokioServer](https://github.com/KZen-networks/white-city/tree/master/RelayProofsOfConcept/EddsaTokioServer):** a socket level implementaion using Tokio Crate.
+- **[RocketServer](https://github.com/KZen-networks/white-city/tree/master/RelayProofsOfConcept/EddsaRocketServer):** a Http server implementation using Rocket crate. 
+Both proof of concept currently running [multi party EdDSA](https://github.com/KZen-networks/multi-party-eddsa) library. As a side project there is also an effort to formally verify the centrelized state machine model in [Coq/TLA+](https://github.com/KZen-networks/white-city/tree/master/RelayProofsOfConcept/Formal-spec)
+
+### Hall of Fame: 
+Here is a list of contributors to White City (not ordered): 
+- Avi Kozokin
+- Alex Manuskin
+- Frederic Peschanski
+- Omer Shlomovits 
+
+
+### Want to Contribute:
+Please send an email to github@kzencorp.com containing your github username. We will get in touch and bring you up to speed. We try to keep the list of issues relevant so it might also be a good place to start.
