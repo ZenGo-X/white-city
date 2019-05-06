@@ -1,0 +1,13 @@
+[package]
+name = "relay-server-common"
+version = "0.1.0"
+authors = ["Avi <kozokinavi@gmail.com>"]
+
+[dependencies]
+serde = "0.8"
+serde_derive = "0.8"
+serde_json = "0.8"
+tokio-core = "0.1"
+byteorder = "1.0"
+
+futures = "0.1"

@@ -1,0 +1,112 @@
+version: 2
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - test
+      - test-emscripten
+      - test-wasm
+      - test-win32
+      - integration-test
+
+jobs:
+  test:
+    machine:
+      enabled: true
+      docker_layer_caching: true
+    steps:
+      - checkout
+      - run:
+          name: Enable ipv6
+          command: |
+            cat <<'EOF' | sudo tee /etc/docker/daemon.json
+            {
+              "ipv6": true,
+              "fixed-cidr-v6": "2001:db8:1::/64"
+            }
+            EOF
+            sudo service docker restart
+      - restore_cache:
+          key: test-cache
+      - run:
+          name: Prepare docker container for building
+          command: docker build --pull --no-cache -t rust-libp2p -f .circleci/images/rust-libp2p/Dockerfile .
+      - run:
+          name: Run tests, inside a docker image, with no feature
+          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --all --no-default-features
+      - run:
+          name: Run tests, inside a docker image, with all features
+          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --all --all-features
+      - save_cache:
+          key: test-cache
+          paths:
+            - "/cache"
+
+  test-emscripten:
+    docker:
+      - image: tomaka/rustc-emscripten
+    steps:
+      - checkout
+      - restore_cache:
+          key: test-emscripten-cache
+      - run:
+          name: Build for emscripten
+          command: cargo build --target asmjs-unknown-emscripten --package libp2p
+      - save_cache:
+          key: test-emscripten-cache
+          paths:
+            - "~/.cargo"
+            - "./target"
+
+  test-wasm:
+    docker:
+      - image: tomaka/rustc-emscripten
+    steps:
+      - checkout
+      - restore_cache:
+          key: test-wasm-cache
+      - run:
+          name: Build for wasm32
+          # TODO: we use --release because of https://github.com/rust-lang/rust/issues/49467
+          # TODO: build libp2p instead of libp2p-core
+          command: cargo build --target wasm32-unknown-unknown --package libp2p-core --release
+      - save_cache:
+          key: test-wasm-cache
+          paths:
+            - "~/.cargo"
+            - "./target"
+
+  test-win32:
+    docker:
+      - image: tomaka/rust-mingw-docker
+    steps:
+      - checkout
+      - restore_cache:
+          key: test-win32-cache
+      - run:
+          name: Build for Windows 64 bits
+          command: cargo check --target x86_64-pc-windows-gnu
+      - run:
+          name: Build for Windows 32 bits
+          command: cargo check --target i686-pc-windows-gnu
+      - save_cache:
+          key: test-win32-cache
+          paths:
+            - "~/.cargo"
+            - "./target"
+
+  integration-test:
+    docker:
+      - image: rust
+      - image: ipfs/go-ipfs
+      - image: parity/libp2p-js-echo-server:gitlab-ci
+    steps:
+      - checkout
+      - restore_cache:
+          key: integration-test-cache
+      - save_cache:
+          key: integration-test-cache
+          paths:
+            - "~/.cargo"
+            - "./target"

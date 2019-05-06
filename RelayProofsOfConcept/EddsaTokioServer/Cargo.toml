@@ -1,0 +1,25 @@
+[package]
+name = "relay-server"
+version = "0.1.0"
+authors = ["Avi <kozokinavi@gmail.com>"]
+
+[dependencies]
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+futures = "0.1"
+tokio-core = "0.1"
+byteorder = "1.0"
+dict = "0.1.5"
+chrono = "0.4"
+
+relay-server-common = { path = "../relay-server/common" }
+
+multi-party-ed25519 = { git = "https://github.com/KZen-networks/multi-party-eddsa" }
+
+
+[dependencies.curv]
+git = "https://github.com/KZen-networks/curv"
+features=["ec_ed25519"]
+
+
