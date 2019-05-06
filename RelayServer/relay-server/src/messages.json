@@ -1,0 +1,48 @@
+{
+  "message_direction": "client2server", //enum [one of client2server and server2client]
+  "register": { // object, optional
+  	"protocol_id": 4 // integer
+  },
+  "relay_message": { // object, optional
+  	"peer_number": 2, // integer
+  	"protocol_id": 4, // integer
+  	"round_number": 10, // integer
+  	"to": [1, 3, 5], // array
+  	"message": { //object
+  		"message_content": "0x141" //string
+  	} 
+  },
+  "abort": { // object, optional
+  	"peer_number": 2 // integer
+  }
+}
+
+{
+  "message_direction": "server2client", //enum [one of client2server and server2client]
+  "abort": { // object, optional
+  	"peer_number": 2 // integer, optional
+  },
+  "response":{ //object, optional
+  	"register_response": { // object , optional
+  		"peer_number": 2 // integer
+  	},
+  	"error_response": { //object, optional
+  		"err_message": "Error, not peer X's turn"
+  	},
+  	"general_response": { //object, optional
+  		"response_text": "general purpose" //string, optional
+  	}
+  },
+ "relay_message": { // object, optional
+ 	"peer_number": 2, // integer (from)
+  	"protocol_id": 4, // integer
+  	"round_number": 10, // integer
+  	"to": [1, 3, 5], // array
+  	"message": { //object
+  		"message_content": "0x141" //string
+  	} 
+ }
+}
+
+===>
+
