@@ -13,10 +13,9 @@ byteorder = "1.0"
 dict = "0.1.5"
 chrono = "0.4"
 
-relay-server-common = { path = "../relay-server/common" }
+relay-server-common = { path = "../EddsaTokioServer/common" }
 
 multi-party-ed25519 = { git = "https://github.com/KZen-networks/multi-party-eddsa" }
-
 
 [dependencies.curv]
 git = "https://github.com/KZen-networks/curv"
