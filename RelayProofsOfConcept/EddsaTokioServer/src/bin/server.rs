@@ -1,4 +1,5 @@
 #![feature(refcell_replace_swap)]
+extern crate chrono;
 ///
 /// Implementation of a server designed to work
 /// as a relay between Peers communicating in a MPC protocol.
@@ -7,60 +8,45 @@
 /// must build its messages in the Codec supplied in relay_server_common lib
 ///
 ///
-/// To run the server: run this main.rs file and in another terminal, run:
+/// To run the server: run this file and in another terminal, run:
 ///     cargo +nightly run --example connect 127.0.0.1:8080
 /// this will run a client that utilizes the server in some way
 /// (for a run demo - run 2 clients)
 ///
 extern crate futures;
-extern crate tokio_core;
 extern crate relay_server_common;
-extern crate chrono;
-
+extern crate tokio_core;
 
 use chrono::prelude::*;
 
 use std::env;
 
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 use std::net::SocketAddr;
 
 use tokio_core::io::Io;
-use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
+use tokio_core::reactor::Core;
 
-use futures::{Stream, Sink, Future};
 use futures::stream;
 use futures::sync::mpsc;
+use futures::{Future, Sink, Stream};
 
 use relay_server_common::{
-    ServerToClientCodec, 
-    ClientMessage,
-    ServerMessage,
-    PeerIdentifier, 
-    ProtocolIdentifier,
-    ServerResponse,
-    RelayMessage,
-    RegisterMessage,
-    AbortMessage,
+    AbortMessage, ClientMessage, PeerIdentifier, ProtocolIdentifier, RegisterMessage, RelayMessage,
+    ServerMessage, ServerResponse, ServerToClientCodec,
 };
 
-use relay_server_common::protocol::{
-    ProtocolDescriptor
-};
+use relay_server_common::protocol::ProtocolDescriptor;
 
 use relay_server_common::common::{
-    RELAY_ERROR_RESPONSE,
-    CANT_REGISTER_RESPONSE,
-    STATE_NOT_INITIALIZED,
-    NOT_YOUR_TURN,
+    CANT_REGISTER_RESPONSE, NOT_YOUR_TURN, RELAY_ERROR_RESPONSE, STATE_NOT_INITIALIZED,
 };
-
 
 // Debug helper function to show type of a future
 fn _debugf<F: Future<Item = (), Error = ()>>(_: F) {}
@@ -76,12 +62,12 @@ pub enum ClientMessageType {
 // Represents the communication channel to remote client
 #[derive(Clone, Debug)]
 pub struct Client {
-    tx:  mpsc::Sender<ServerMessage>,
+    tx: mpsc::Sender<ServerMessage>,
 }
 
 impl Client {
-    pub fn new(tx: mpsc::Sender<ServerMessage>) -> Client{
-        Client {tx}
+    pub fn new(tx: mpsc::Sender<ServerMessage>) -> Client {
+        Client { tx }
     }
 }
 
@@ -92,16 +78,14 @@ pub struct Peer {
     pub registered: bool,
 }
 
-
 impl Peer {
     pub fn new(client: Client) -> Peer {
-        Peer{
+        Peer {
             peer_id: 0,
             client,
-            registered: false
+            registered: false,
         }
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -113,7 +97,6 @@ pub enum RelaySessionState {
     Initialized,
 
     Aborted,
-
 }
 
 #[derive(Debug, Clone)]
@@ -125,10 +108,9 @@ struct RelaySession {
     protocol: RefCell<ProtocolDescriptor>,
 
     state: RefCell<RelaySessionState>,
-
 }
 
-impl RelaySession{
+impl RelaySession {
     /*
         RelaySession Private functions
     */
@@ -137,16 +119,30 @@ impl RelaySession{
     /// after adding this address as a peer,
     /// the state might change to either Uninitialized (if this is the first peer registering)
     /// or Initialized (meaning session has reached the required # of participants)
-    fn register_new_peer(&self, addr: SocketAddr, protocol_id: ProtocolIdentifier, capacity: u32) -> Option<u32> {
+    fn register_new_peer(
+        &self,
+        addr: SocketAddr,
+        protocol_id: ProtocolIdentifier,
+        capacity: u32,
+    ) -> Option<u32> {
         let _addr = &addr;
-        let number_of_active_peers = self.peers.borrow().values().filter(|p| p.registered).fold(0, |acc, _| acc + 1);
+        let number_of_active_peers = self
+            .peers
+            .borrow()
+            .values()
+            .filter(|p| p.registered)
+            .fold(0, |acc, _| acc + 1);
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
-	println!("-----------------\nPEERS: {:?}\n---------------",self.peers);
-        match self.can_register(_addr, protocol_descriptor){
+        println!(
+            "-----------------\nPEERS: {:?}\n---------------",
+            self.peers
+        );
+        match self.can_register(_addr, protocol_descriptor) {
             true => {
-
                 let mut peers = self.peers.borrow_mut();
-                let peer = peers.get_mut(_addr).unwrap_or_else(|| panic!("No conection"));
+                let peer = peers
+                    .get_mut(_addr)
+                    .unwrap_or_else(|| panic!("No conection"));
 
                 // activate this connection as a peer
                 peer.registered = true;
@@ -155,16 +151,17 @@ impl RelaySession{
                 // and change the state
                 match self.state.clone().into_inner() {
                     RelaySessionState::Empty => {
-                        self.protocol.replace(ProtocolDescriptor::new(protocol_id, capacity));
+                        self.protocol
+                            .replace(ProtocolDescriptor::new(protocol_id, capacity));
                         self.state.replace(RelaySessionState::Uninitialized);
-                    },
+                    }
                     _ => {}
                 }
                 if self.protocol.clone().into_inner().capacity == number_of_active_peers + 1 {
                     self.state.replace(RelaySessionState::Initialized);
                 }
                 return Some(number_of_active_peers + 1); //peer_id
-            },
+            }
             false => {
                 println!("\nunable to register {:}", addr); // error
                 None
@@ -174,29 +171,29 @@ impl RelaySession{
 
     /// Checks if it is possible for this address
     /// to register as a peer in this session
-    fn can_register(&self, addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool{
+    fn can_register(&self, addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool {
         match self.state.clone().into_inner() {
             // if this is the first peer to register
             // check that the protocol is valid
             RelaySessionState::Empty => {
                 println!("\nchecking if protocol description is valid");
-                if !relay_server_common::protocol::is_valid_protocol(&protocol){
+                if !relay_server_common::protocol::is_valid_protocol(&protocol) {
                     return false;
                 }
-            },
+            }
             // if there is already a set protocol,
             // check that the peer wants to register to the set protocol
             RelaySessionState::Uninitialized => {
                 println!("\nchecking if protocol description is same as aet protocol description");
                 let prot = self.protocol.clone().into_inner();
-                if !(prot.id == protocol.id && prot.capacity == protocol.capacity){
+                if !(prot.id == protocol.id && prot.capacity == protocol.capacity) {
                     return false;
                 }
-            },
+            }
             _ => {
                 println!("\nRelay session state is neither empty nor uninitialized ");
-                return false
-            },
+                return false;
+            }
         }
         // register the peer iff it has an active connection and did not register yet
         if let Some(peer) = self.peers.borrow().get(addr) {
@@ -205,23 +202,24 @@ impl RelaySession{
         false
     }
 
-
     /// check if this relay message sent from the given SocketAddr
     /// is valid to send to rest of the peers
-    fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str>{
-
+    fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
         println!("\nChecking if {:} can relay", msg.peer_number);
         println!("\nServer state: {:?}", self.state.clone().into_inner());
-        println!("\nTurn of peer #: {:}", self.protocol.clone().into_inner().next());
+        println!(
+            "\nTurn of peer #: {:}",
+            self.protocol.clone().into_inner().next()
+        );
 
         match self.state.clone().into_inner() {
             RelaySessionState::Initialized => {
                 println!("\nRelay sessions state is initialized");
-            },
+            }
             _ => {
                 println!("\nRelay sessions state is not initialized");
                 return Err(STATE_NOT_INITIALIZED);
-            },
+            }
         }
         // validate the sender in the message (peer_number field) is the peer associated with this address
         let sender = msg.peer_number;
@@ -235,17 +233,14 @@ impl RelaySession{
                 if self.protocol.clone().into_inner().next() == p.peer_id {
                     return Ok(());
                 } else {
-                    return Err(NOT_YOUR_TURN)
+                    return Err(NOT_YOUR_TURN);
                 }
             }
         }
         {
             return Err("Not A peer");
         }
-
     }
-
-
 }
 
 impl RelaySession {
@@ -276,7 +271,6 @@ impl RelaySession {
         self.peers.borrow_mut().insert(addr, Peer::new(client));
     }
 
-
     /// Removes a connection from the peers collection
     pub fn remove(&self, addr: &SocketAddr) -> Option<Peer> {
         self.peers.borrow_mut().remove(addr)
@@ -285,19 +279,26 @@ impl RelaySession {
     /// Send a message from the server to a group of peers
     /// takes each peers 'tx' part of the mpsc channel, and uses it to send the message to the client
     /// this peer represents
-    pub fn multiple_send<E: 'static>(&self, message: ServerMessage, to: &Vec<PeerIdentifier>) -> Box<Future<Item = (), Error = E>> {
+    pub fn multiple_send<E: 'static>(
+        &self,
+        message: ServerMessage,
+        to: &Vec<PeerIdentifier>,
+    ) -> Box<Future<Item = (), Error = E>> {
         let peers = self.peers.borrow();
         // For each client, clone its `mpsc::Sender` (because sending consumes the sender) and
         // start sending a clone of `message`. This produces an iterator of Futures.
         //let all_sends = client_map.values().map(|client| client.tx.clone().send(message.clone()));
-        let sends = peers.values().filter(|peer|{
-            let id = &(peer.peer_id as PeerIdentifier);
-            to.contains(id ) && peer.registered
-        }).map(|peer|{
-		println!("\n{}: sending msg to peer {}:", Local::now(),peer.peer_id);
-        println!("\n{:?}",message);
-            peer.client.tx.clone().send(message.clone())
-        });
+        let sends = peers
+            .values()
+            .filter(|peer| {
+                let id = &(peer.peer_id as PeerIdentifier);
+                to.contains(id) && peer.registered
+            })
+            .map(|peer| {
+                println!("\n{}: sending msg to peer {}:", Local::now(), peer.peer_id);
+                println!("\n{:?}", message);
+                peer.client.tx.clone().send(message.clone())
+            });
 
         let send_stream = stream::futures_unordered(sends).then(|_| Ok(()));
 
@@ -306,24 +307,32 @@ impl RelaySession {
     }
 
     /// try to send a server response message
-    pub fn send_response<E: 'static>(&self, addr: SocketAddr,response: ServerMessage) -> Box<Future<Item = (), Error = E>> /*-> Result<(),()>*/ {
+    pub fn send_response<E: 'static>(
+        &self,
+        addr: SocketAddr,
+        response: ServerMessage,
+    ) -> Box<Future<Item = (), Error = E>> /*-> Result<(),()>*/ {
         let peers = self.peers.borrow();
         // For each client, clone its `mpsc::Sender` (b ecause sending consumes the sender) and
         // start sending a clone of `message`. This produces an iterator of Futures.
         //let all_sends = client_map.values().map(|client| client.tx.clone().send(message.clone()));
-        if let Some(_peer)= peers.get(&addr){
+        if let Some(_peer) = peers.get(&addr) {
             let mut to = Vec::new();
             if let Some(peer) = peers.get(&addr) {
                 to.push(peer.peer_id as PeerIdentifier);
             }
             self.multiple_send(response, &to)
-        }else {
+        } else {
             panic!("err")
         }
     }
 
     /// try to send a relay message to the desired peers
-    pub fn relay_message<E: 'static>(&self, from: &SocketAddr, msg: RelayMessage) -> Box<Future<Item = (), Error = E>>{
+    pub fn relay_message<E: 'static>(
+        &self,
+        from: &SocketAddr,
+        msg: RelayMessage,
+    ) -> Box<Future<Item = (), Error = E>> {
         let mut server_msg = ServerMessage::new();
         let mut _to = vec![];
         let peer_id = self.peers.borrow_mut().get_mut(from).unwrap().peer_id;
@@ -332,15 +341,18 @@ impl RelaySession {
             Ok(()) => {
                 server_msg.relay_message = Some(msg.clone());
                 _to = msg.to;
-//                let sender_index = _to.iter().position(|x| *x == peer_id);
-//                if sender_index.is_some(){
-//                    _to.remove(sender_index.unwrap());
-//                }
+                //                let sender_index = _to.iter().position(|x| *x == peer_id);
+                //                if sender_index.is_some(){
+                //                    _to.remove(sender_index.unwrap());
+                //                }
                 self.protocol.borrow().advance_turn();
 
                 //println!("\nsending relay message: {:?}", server_msg);
-                println!("\nsending relay message from peer {:?} to: {:?}", peer_id,_to);
-            },
+                println!(
+                    "\nsending relay message from peer {:?} to: {:?}",
+                    peer_id, _to
+                );
+            }
             Err(err_msg) => {
                 // send an error response to sender
                 println!("\n{:} can not relay", peer_id);
@@ -351,29 +363,39 @@ impl RelaySession {
         self.multiple_send(server_msg, &_to)
     }
     /// try to register a new peer
-    pub fn register<E: 'static>(&self, addr: SocketAddr, protocol_id: ProtocolIdentifier, capacity: u32)  -> Box<Future<Item = (), Error = E>> {
+    pub fn register<E: 'static>(
+        &self,
+        addr: SocketAddr,
+        protocol_id: ProtocolIdentifier,
+        capacity: u32,
+    ) -> Box<Future<Item = (), Error = E>> {
         let mut server_msg = ServerMessage::new();
         let peer_id = self.register_new_peer(addr, protocol_id, capacity);
         if peer_id.is_some() {
             server_msg.response = Some(ServerResponse::Register(peer_id.unwrap()));
         } else {
-            server_msg.response = Some(ServerResponse::ErrorResponse(String::from(CANT_REGISTER_RESPONSE)));
+            server_msg.response = Some(ServerResponse::ErrorResponse(String::from(
+                CANT_REGISTER_RESPONSE,
+            )));
         }
         self.send_response(addr, server_msg)
     }
 
     /// abort this relay session and send abort message to all peers
-    pub fn abort<E: 'static>(&self, addr:SocketAddr) -> Box<Future<Item = (), Error = E>> {
+    pub fn abort<E: 'static>(&self, addr: SocketAddr) -> Box<Future<Item = (), Error = E>> {
         println!("\nAborting");
         let mut server_msg = ServerMessage::new();
-        match self.state.clone().into_inner(){
-            RelaySessionState::Initialized => {},
-            _ => {return Box::new(futures::future::ok(()))},
+        match self.state.clone().into_inner() {
+            RelaySessionState::Initialized => {}
+            _ => return Box::new(futures::future::ok(())),
         }
-        let peer= self.get_peer(&addr);
+        let peer = self.get_peer(&addr);
         match peer {
             Some(p) => {
-                server_msg.abort = Some(AbortMessage::new(p.peer_id, self.protocol.clone().into_inner().id));
+                server_msg.abort = Some(AbortMessage::new(
+                    p.peer_id,
+                    self.protocol.clone().into_inner().id,
+                ));
                 self.state.replace(RelaySessionState::Aborted);
                 let mut to = Vec::new();
                 let peers = self.peers.borrow();
@@ -381,75 +403,77 @@ impl RelaySession {
                     to.push(p.peer_id);
                 });
                 self.multiple_send(server_msg, &to)
-            },
-            None => {
-               Box::new(futures::future::ok(()))
             }
+            None => Box::new(futures::future::ok(())),
         }
     }
 
     /// handle a closed connection
     /// if it an active peer disconnected - abort the session
     /// otherwise, simply remove the connection of this address from the peers collection
-    pub fn connection_closed<E: 'static>(&mut self, addr:SocketAddr) -> Box<Future<Item = (), Error = E>>{
+    pub fn connection_closed<E: 'static>(
+        &mut self,
+        addr: SocketAddr,
+    ) -> Box<Future<Item = (), Error = E>> {
         println!("\nconnection closed.");
-        let mut to= Vec::new();
-        self.peers.borrow().values().filter(|p| p.registered).for_each(|p| {
-            to.push(p.peer_id);
-        });
+        let mut to = Vec::new();
+        self.peers
+            .borrow()
+            .values()
+            .filter(|p| p.registered)
+            .for_each(|p| {
+                to.push(p.peer_id);
+            });
         let peers = self.peers.borrow();
         // check if the address was a peer
-        let peer= peers.get(&addr);
+        let peer = peers.get(&addr);
         let mut peer_disconnected = false;
         let mut peer_id = 0;
-        if peer.is_some(){
+        if peer.is_some() {
             let p = peer.unwrap();
             if !p.registered {
                 self.remove(&addr);
                 return Box::new(futures::future::ok(()));
-            }
-            else{
-               peer_id = p.peer_id;
-               peer_disconnected = true;
-               println!("\naborted from peer #: {:}",peer_id);
+            } else {
+                peer_id = p.peer_id;
+                peer_disconnected = true;
+                println!("\naborted from peer #: {:}", peer_id);
             }
         }
         if peer_disconnected {
             println!("\nconnection closed with a peer. Aborting..");
-            let mut server_msg= ServerMessage::new();
-            server_msg.abort = Some(AbortMessage::new(peer_id, self.protocol.clone().into_inner().id));
+            let mut server_msg = ServerMessage::new();
+            server_msg.abort = Some(AbortMessage::new(
+                peer_id,
+                self.protocol.clone().into_inner().id,
+            ));
             self.state.replace(RelaySessionState::Aborted);
             return self.multiple_send(server_msg, &to);
         }
         Box::new(futures::future::ok(()))
     }
 
-
     /// get a copy of Peer that addr represents
     pub fn get_peer(&self, addr: &SocketAddr) -> Option<Peer> {
         match self.peers.borrow().get(addr) {
-            Some(p) => {
-                match p.registered {
-                    true => Some(p.clone()),
-                    false => None
-                }
+            Some(p) => match p.registered {
+                true => Some(p.clone()),
+                false => None,
             },
-            None => None
+            None => None,
         }
     }
-
 }
 
 /// get the message type of a given client message
 pub fn resolve_msg_type(msg: ClientMessage) -> ClientMessageType {
-
-    if msg.register.is_some(){
+    if msg.register.is_some() {
         return ClientMessageType::Register;
     }
-    if msg.relay_message.is_some(){
+    if msg.relay_message.is_some() {
         return ClientMessageType::RelayMessage;
     }
-    if msg.abort.is_some(){
+    if msg.abort.is_some() {
         return ClientMessageType::Abort;
     }
     return ClientMessageType::Undefined;
@@ -463,7 +487,7 @@ fn main() {
     let mut core = Core::new().unwrap();
     let handle = core.handle();
 
-    let listener= TcpListener::bind(&addr, &handle).unwrap();
+    let listener = TcpListener::bind(&addr, &handle).unwrap();
     println!("\nListening on: {}", addr);
 
     // Create the session fot the relay server
@@ -490,7 +514,6 @@ fn main() {
 
         // define future for receiving half
         let relay_session_inner = Arc::clone(&relay_session);
-	
         let reader = from_client.for_each(move |msg| {
             let relay_session_i= relay_session_inner.lock().unwrap();
             let relay_session_inner = &*relay_session_i;
@@ -552,7 +575,7 @@ fn main() {
                 // or an active connection closed - which is allowed
                 let mut relay_session_inner = relay_session_inner.lock().unwrap();
                 relay_session_inner.connection_closed(addr)
-        }));
+            }));
 
         Ok(())
     });
@@ -560,6 +583,3 @@ fn main() {
     // execute server
     core.run(srv).unwrap();
 }
-
-
-
