@@ -9,4 +9,4 @@ you should take `apk` for the public key to generate to address from. pay attent
 3. Run signing: `run --bin eddsa_sign_client 127.0.0.1:8080 keys1 message`
 where `message` is the message  to sign. Run another instance for the second party with `keys2`
 
-4. the output will be a file with (R,s) in the same format as Zilliqa. the file is called `signature`
+4. the output will be a file with (R,s). the file is called `signature`
