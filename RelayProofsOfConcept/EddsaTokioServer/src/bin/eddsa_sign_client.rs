@@ -78,6 +78,7 @@ struct EddsaPeer {
     pub message: Vec<u8>,
 
     pub agg_key: Option<KeyAgg>,
+    pub kg_index: u32,
     pub R_tot: Option<GE>,
 
     // indicators for which of this peers messages were accepted
@@ -131,7 +132,12 @@ impl EddsaPeer {
         println!("# of public keys : {:?}", pks.len());
         let peer_id = self.peer_id.clone().into_inner();
         let index = (peer_id - 1) as usize;
-        let agg_key = KeyPair::key_aggregation_n(&pks, &index);
+        let agg_key = if self.kg_index == peer_id {
+            KeyPair::key_aggregation_n(&pks, &index)
+        } else {
+            pks.reverse();
+            KeyPair::key_aggregation_n(&pks, &(1 - index))
+        };
         return agg_key;
     }
 
@@ -184,7 +190,7 @@ impl EddsaPeer {
                 let s_slice: &str = &pk[..]; // take a full slice of the string
                 let _pk: GE = serde_json::from_str(&s_slice)
                     .unwrap_or_else(|e| panic!("failed to deserialize R"));
-                println!("-------Got peer # {:} pk! {:?}", from, pk);
+                println!("-------Got peer # {:} pk! {:?}", from, _pk * &eight_inv);
                 self.add_pk(from, _pk * &eight_inv);
             }
             _ => panic!("expected public key message"),
@@ -370,13 +376,11 @@ impl EddsaPeer {
 
 impl Peer for EddsaPeer {
     fn new(capacity: u32, _message: Vec<u8>) -> EddsaPeer {
+        let data = fs::read_to_string(env::args().nth(2).unwrap())
+            .expect("Unable to load keys, did you run keygen first? ");
+        let (key, apk, kg_index): (KeyPair, KeyAgg, u32) = serde_json::from_str(&data).unwrap();
         EddsaPeer {
-            client_key: {
-                let data = fs::read_to_string(env::args().nth(2).unwrap())
-                    .expect("Unable to load keys, did you run keygen first? ");
-                let (key, apk): (KeyPair, KeyAgg) = serde_json::from_str(&data).unwrap();
-                key
-            },
+            client_key: { key },
             pks: HashMap::new(),
             commitments: HashMap::new(),
             r_s: HashMap::new(),
@@ -385,6 +389,7 @@ impl Peer for EddsaPeer {
             message: _message,
             peer_id: RefCell::new(0),
             agg_key: None,
+            kg_index,
             current_step: 0,
             R_tot: None,
             ephemeral_key: None,
@@ -462,6 +467,7 @@ impl Peer for EddsaPeer {
         let signature = Signature::add_signature_parts(s);
         // verify message with signature
         let apk = self.aggregate_pks();
+
         match verify(&signature, &self.message[..], &apk.apk) {
             Ok(_) => {
                 let mut R_vec = signature.R.pk_to_key_slice().to_vec();

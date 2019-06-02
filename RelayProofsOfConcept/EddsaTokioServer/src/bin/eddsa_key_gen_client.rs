@@ -300,8 +300,9 @@ impl Peer for EddsaPeer {
     fn finalize(&mut self) -> Result<(), &'static str> {
         let key = &self.client_key.clone();
         let apk = &self.aggregate_pks();
+        let index = &self.peer_id;
 
-        let keygen_json = serde_json::to_string(&(key, apk)).unwrap();
+        let keygen_json = serde_json::to_string(&(key, apk, index)).unwrap();
 
         let res = fs::write(env::args().nth(2).unwrap(), keygen_json);
         match res {
