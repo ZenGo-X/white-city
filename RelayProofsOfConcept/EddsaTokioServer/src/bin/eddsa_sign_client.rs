@@ -41,11 +41,11 @@ use relay_server_common::{
 extern crate curv;
 extern crate multi_party_ed25519;
 
+use curv::arithmetic::traits::Converter;
 use curv::elliptic::curves::ed25519::*;
 use curv::elliptic::curves::traits::ECPoint;
 use curv::elliptic::curves::traits::ECScalar;
 use curv::{BigInt, FE, GE};
-
 use multi_party_ed25519::protocols::aggsig::{
     test_com, verify, EphemeralKey, KeyAgg, KeyPair, SignFirstMsg, SignSecondMsg, Signature,
 };
@@ -464,9 +464,16 @@ impl Peer for EddsaPeer {
         let apk = self.aggregate_pks();
         match verify(&signature, &self.message[..], &apk.apk) {
             Ok(_) => {
-                let sign_json = serde_json::to_string(&signature).unwrap();
+                let mut R_vec = signature.R.pk_to_key_slice().to_vec();
+                let mut s_vec = BigInt::to_vec(&signature.s.to_big_int());
+                s_vec.reverse();
+                R_vec.extend_from_slice(&s_vec[..]);
 
-                fs::write("signature".to_string(), sign_json).expect("Unable to save !");
+                fs::write(
+                    "signature".to_string(),
+                    BigInt::from(&R_vec[..]).to_str_radix(16),
+                )
+                .expect("Unable to save !");
                 Ok(())
             }
             Err(e) => Err("Failed to verify"),
