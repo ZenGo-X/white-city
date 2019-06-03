@@ -7,6 +7,8 @@ you should take `apk` for the public key to generate to address from. pay attent
 (you can choose different names instead of `keys1` and `keys2` )
 
 3. Run signing: `cargo run --bin eddsa_sign_client 127.0.0.1:8080 keys1 message`
-where `message` is the message  to sign. Run another instance for the second party with `keys2`
+where `message` is the message to sign. Run another instance for the second party with `keys2`
 
 4. the output will be a file with (R,s). the file is called `signature`
+
+Alternatively, run `./keygen.sh` for keygen and  `./sign.sh message` where `message` is the message to sign
