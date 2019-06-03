@@ -11,4 +11,6 @@ where `message` is the message to sign. Run another instance for the second part
 
 4. the output will be a file with (R,s). the file is called `signature`
 
-Alternatively, run `./keygen.sh` for keygen and  `./sign.sh message` where `message` is the message to sign
+Alternatively, run `./keygen.sh` for keygen and  `./sign.sh message` where `message` is the message to sign (see demo gif below)
+
+![demo](demo/2P-EdDSA%20demo.gif)
