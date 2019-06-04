@@ -9,6 +9,7 @@ extern crate dict;
 extern crate futures;
 extern crate hex;
 extern crate relay_server_common;
+extern crate structopt;
 extern crate tokio_core;
 
 use chrono::prelude::*;
@@ -17,8 +18,10 @@ use std::cell::RefCell;
 use std::env;
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::vec::Vec;
 use std::{thread, time};
+use structopt::StructOpt;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -56,6 +59,27 @@ use relay_server_common::common::*;
 use dict::{Dict, DictIface};
 use std::collections::HashMap;
 use std::fs;
+
+// Arguments parsing
+#[derive(StructOpt, Debug)]
+#[structopt(name = "eddsa-sign-client")]
+struct Opt {
+    /// Number of participants in the protocol
+    #[structopt(short = "P", long = "participants", default_value = "2")]
+    capacity: u32,
+
+    /// Address the server listens on
+    #[structopt(name = "ADDRESS")]
+    address: String,
+
+    /// Output file
+    #[structopt(name = "KEY_FILE", parse(from_os_str))]
+    output: PathBuf,
+
+    /// Message to sign
+    #[structopt(name = "MESSAGE")]
+    message: String,
+}
 
 struct EddsaPeer {
     // this peers identifier in this session
@@ -840,23 +864,20 @@ enum MessagePayloadType {
 }
 
 fn main() {
+    let opt = Opt::from_args();
+
+    let addr = opt.address;
+
+    let PROTOCOL_IDENTIFIER_ARG = 1;
+    let PROTOCOL_CAPACITY_ARG = opt.capacity;
+
+    let addr = addr.parse::<SocketAddr>().unwrap();
+
     let message_str = env::args().nth(3).unwrap_or("".to_string());
-    let message_to_sign = match hex::decode(message_str.clone()) {
+    let message_to_sign = match hex::decode(opt.message.clone()) {
         Ok(x) => x,
         Err(_e) => message_str.as_bytes().to_vec(),
     };
-    // let message_to_sign = &message[..];
-
-    let PROTOCOL_IDENTIFIER_ARG = 1;
-    let PROTOCOL_CAPACITY_ARG = 2 as ProtocolIdentifier;
-
-    let mut args = env::args().skip(1).collect::<Vec<_>>();
-    // Parse what address we're going to connect to
-    let addr = args
-        .first()
-        .unwrap_or_else(|| panic!("this program requires at least one argument"));
-
-    let addr = addr.parse::<SocketAddr>().unwrap();
 
     // Create the event loop and initiate the connection to the remote server
     let mut core = Core::new().unwrap();
