@@ -1,5 +1,7 @@
 #![feature(refcell_replace_swap)]
 extern crate chrono;
+extern crate futures;
+extern crate relay_server_common;
 ///
 /// Implementation of a server designed to work
 /// as a relay between Peers communicating in a MPC protocol.
@@ -13,8 +15,8 @@ extern crate chrono;
 /// this will run a client that utilizes the server in some way
 /// (for a run demo - run 2 clients)
 ///
-extern crate futures;
-extern crate relay_server_common;
+///
+extern crate structopt;
 extern crate tokio_core;
 
 use chrono::prelude::*;
@@ -47,6 +49,21 @@ use relay_server_common::protocol::ProtocolDescriptor;
 use relay_server_common::common::{
     CANT_REGISTER_RESPONSE, NOT_YOUR_TURN, RELAY_ERROR_RESPONSE, STATE_NOT_INITIALIZED,
 };
+
+use structopt::StructOpt;
+
+// Argument parsing
+#[derive(StructOpt, Debug)]
+#[structopt(name = "relay-server")]
+struct Opt {
+    /// Number of participants in the protocol
+    #[structopt(short = "P", long = "participants", default_value = "2")]
+    capacity: u32,
+
+    /// Address the server listens on
+    #[structopt(name = "ADDRESS", default_value = "127.0.0.1:8080")]
+    address: String,
+}
 
 // Debug helper function to show type of a future
 fn _debugf<F: Future<Item = (), Error = ()>>(_: F) {}
@@ -250,14 +267,14 @@ impl RelaySession {
 
     /// Creates a new Relay Session with default (empty) fields
     /// and an Empty state
-    pub fn new() -> RelaySession {
+    pub fn new(capacity: u32) -> RelaySession {
         RelaySession {
 
             peers: /*Arc::new(Mutex::new(HashMap::new())),// */(Rc::new(RefCell::new(HashMap::new()))),
 
             active_peers: RefCell::new(0),
 
-            protocol: RefCell::new(relay_server_common::protocol::ProtocolDescriptor::new(0,2)),
+            protocol: RefCell::new(relay_server_common::protocol::ProtocolDescriptor::new(0, capacity)),
 
             state: RefCell::new(RelaySessionState::Empty),
 
@@ -480,7 +497,9 @@ pub fn resolve_msg_type(msg: ClientMessage) -> ClientMessageType {
 }
 
 fn main() {
-    let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
+    let opt = Opt::from_args();
+
+    let addr = opt.address;
     let addr = addr.parse().unwrap();
 
     // Create the event loop and TCP listener we'll accept connections on.
@@ -491,7 +510,7 @@ fn main() {
     println!("\nListening on: {}", addr);
 
     // Create the session fot the relay server
-    let relay_session = Arc::new(Mutex::new(RelaySession::new()));
+    let relay_session = Arc::new(Mutex::new(RelaySession::new(opt.capacity)));
 
     let srv = listener.incoming().for_each(move |(socket, addr)| {
         // Got a new connection
