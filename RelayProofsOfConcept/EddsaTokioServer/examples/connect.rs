@@ -22,7 +22,7 @@ use futures::{Future, Sink, Stream};
 
 use relay_server_common::{
     ClientMessage, ClientToServerCodec, PeerIdentifier, ProtocolIdentifier, RelayMessage,
-    ServerMessage, ServerResponse,
+    ServerMessage, ServerMessageType, ServerResponse,
 };
 
 // ClientSession holds session data
@@ -43,28 +43,6 @@ impl ProtocolSession {
             next_message: None,
         }
     }
-}
-
-#[derive(Debug)]
-pub enum ServerMessageType {
-    // TODO this is somewhat duplicate
-    Response,
-    Abort,
-    RelayMessage,
-    Undefined,
-}
-
-pub fn resolve_msg_type(msg: ServerMessage) -> ServerMessageType {
-    if msg.response.is_some() {
-        return ServerMessageType::Response;
-    }
-    if msg.relay_message.is_some() {
-        return ServerMessageType::RelayMessage;
-    }
-    if msg.abort.is_some() {
-        return ServerMessageType::Abort;
-    }
-    return ServerMessageType::Undefined;
 }
 
 pub enum MessageProcessResult {
@@ -103,7 +81,7 @@ fn main() {
             let mut msg = ClientMessage::new();
 
             let register_msg = msg.register(protocol_id, capacity);
-            session.protocol_id = protocol_id;
+            session.protocol_id = 1;
 
             // send register message to server
             framed_stream.send(msg).and_then(|stream| {
@@ -111,7 +89,7 @@ fn main() {
                 let client = rx
                     .and_then(|msg| {
                         println!("Got message from server: {:?}", msg);
-                        let msg_type = resolve_msg_type(msg.clone());
+                        let msg_type = resolve_server_msg_type(&msg);
                         match msg_type {
                             ServerMessageType::Response => {
                                 // we expect to receive a register response here
@@ -121,8 +99,7 @@ fn main() {
                                         println!("Peer identifier: {}", peer_id);
                                         // create a mock relay message
                                         let mut client_message = ClientMessage::new();
-                                        let mut relay_message =
-                                            RelayMessage::new(peer_id, protocol_id);
+                                        let mut relay_message = RelayMessage::new(peer_id, 1);
                                         let mut to: Vec<u32> = Vec::new();
                                         if peer_id == 2 {
                                             to.push(1);
@@ -134,11 +111,8 @@ fn main() {
                                         let wait_time = time::Duration::from_millis(5000);
                                         thread::sleep(wait_time);
 
-                                        relay_message.set_message_params(
-                                            0,
-                                            to,
-                                            format!("Hi from {}", peer_id),
-                                        );
+                                        relay_message
+                                            .set_message_params(to, format!("Hi from {}", peer_id));
                                         client_message.relay_message = Some(relay_message.clone());
                                         //session.next_message = Some(client_message);
                                         return Ok(client_message);
@@ -162,21 +136,7 @@ fn main() {
                                 //panic!("Got undefined message: {:?}",msg);
                             }
                         }
-                    }) /*.and_then(|result|{
-                        match result {
-                            MessageProcessResult::NoMessage => {
-                                println!("no message to send");
-                                Ok(ClientMessage::new())
-                            },
-                            MessageProcessResult::Message => {
-                                Ok(session.next_message.clone().unwrap())
-                            }
-                            _ => {
-                                println!("no message to send");
-                                Ok(ClientMessage::new())
-                            }
-                        }
-                    })*/
+                    })
                     .forward(tx);
                 client
             })

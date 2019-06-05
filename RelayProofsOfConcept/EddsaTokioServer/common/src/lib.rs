@@ -1,16 +1,16 @@
 #[macro_use]
 extern crate serde_derive;
+extern crate byteorder;
 extern crate serde;
 extern crate serde_json;
 extern crate tokio_core;
-extern crate byteorder;
 
+use serde::{Deserialize, Serialize};
 use std::vec::Vec;
-use serde::{Serialize, Deserialize};
 
 mod codec;
-pub mod protocol;
 pub mod common;
+pub mod protocol;
 
 pub type ProtocolIdentifier = u32;
 pub type PeerIdentifier = u32;
@@ -23,16 +23,16 @@ pub struct RelayMessage {
     pub protocol_id: ProtocolIdentifier,
     //pub round: u32,
     pub to: Vec<PeerIdentifier>,
-    pub message: MessagePayload
+    pub message: MessagePayload,
 }
 
 impl RelayMessage {
-    pub fn new(peer_number: PeerIdentifier, protocol_id: ProtocolIdentifier) -> RelayMessage{
+    pub fn new(peer_number: PeerIdentifier, protocol_id: ProtocolIdentifier) -> RelayMessage {
         let s = r#"{}"#;
         RelayMessage {
             peer_number,
             protocol_id,
-        //    round: 0,
+            //    round: 0,
             to: Vec::new(),
             message: String::from(""),
         }
@@ -40,17 +40,14 @@ impl RelayMessage {
 
     pub fn set_message_params<S: Into<String>>(
         &mut self,
-      //  round_number: u32,
+        //  round_number: u32,
         to: Vec<PeerIdentifier>,
-        message: S
-    )
-    {
+        message: S,
+    ) {
         //self.round = round_number;
         self.to = to;
         self.message = message.into();
     }
-
-
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -62,10 +59,10 @@ pub enum ServerResponse {
     ErrorResponse(String),
 
     // General Response
-//    GeneralResponse(String),
+    //    GeneralResponse(String),
 
     // No response
-    NoResponse
+    NoResponse,
 }
 
 #[derive(Default, Clone, Debug, Deserialize, Serialize)]
@@ -74,9 +71,9 @@ pub struct AbortMessage {
     pub protocol_id: ProtocolIdentifier,
 }
 
-impl AbortMessage{
+impl AbortMessage {
     pub fn new(peer_number: PeerIdentifier, protocol_id: ProtocolIdentifier) -> AbortMessage {
-        AbortMessage{
+        AbortMessage {
             peer_number,
             protocol_id,
         }
@@ -92,7 +89,6 @@ pub struct RegisterMessage {
 
 #[derive(Default, Clone, Debug, Deserialize, Serialize)]
 pub struct ServerMessage {
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub abort: Option<AbortMessage>,
 
@@ -100,9 +96,8 @@ pub struct ServerMessage {
     pub response: Option<ServerResponse>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub relay_message: Option<RelayMessage>
+    pub relay_message: Option<RelayMessage>,
 }
-
 
 impl ServerMessage {
     pub fn new() -> ServerMessage {
@@ -111,11 +106,30 @@ impl ServerMessage {
 
             abort: None,
 
-            relay_message: None
-
+            relay_message: None,
         }
     }
+}
 
+#[derive(Debug)]
+pub enum ServerMessageType {
+    Response,
+    Abort,
+    RelayMessage,
+    Undefined,
+}
+
+pub fn resolve_server_msg_type(msg: &ServerMessage) -> ServerMessageType {
+    if msg.response.is_some() {
+        return ServerMessageType::Response;
+    }
+    if msg.relay_message.is_some() {
+        return ServerMessageType::RelayMessage;
+    }
+    if msg.abort.is_some() {
+        return ServerMessageType::Abort;
+    }
+    return ServerMessageType::Undefined;
 }
 
 #[derive(Default, Debug, Deserialize, Serialize, Clone)]
@@ -127,44 +141,39 @@ pub struct ClientMessage {
     pub abort: Option<AbortMessage>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub relay_message: Option<RelayMessage>
-
+    pub relay_message: Option<RelayMessage>,
 }
-
 
 impl ClientMessage {
     pub fn new() -> ClientMessage {
-        ClientMessage{
-
+        ClientMessage {
             register: None,
 
             abort: None,
 
-            relay_message: None
-
+            relay_message: None,
         }
     }
 
     pub fn register(&mut self, protocol_id: ProtocolIdentifier, capacity: u32) {
-        self.register = Some(RegisterMessage{
+        self.register = Some(RegisterMessage {
             protocol_id,
             capacity,
         });
-
     }
 
-    pub fn is_empty(&self) -> bool{
+    pub fn is_empty(&self) -> bool {
         self.relay_message.is_none() && self.abort.is_none() && self.register.is_none()
     }
 
     pub fn are_equal_payloads(&self, msg: &ClientMessage) -> bool {
-        if self.register.is_some() && msg.register.is_some(){return true;}
-        else if self.relay_message.is_some() && msg.relay_message.is_some(){
+        if self.register.is_some() && msg.register.is_some() {
+            return true;
+        } else if self.relay_message.is_some() && msg.relay_message.is_some() {
             let self_message = self.relay_message.clone().unwrap().message;
             let message = msg.relay_message.clone().unwrap().message;
             return self_message == message;
-        }
-        else if self.abort.is_some() && msg.abort.is_some() {
+        } else if self.abort.is_some() && msg.abort.is_some() {
             return true;
         }
         false
@@ -173,15 +182,13 @@ impl ClientMessage {
 
 #[derive(Default, Debug, Serialize, Deserialize)]
 struct RegisterResponse {
-    peer_number: PeerIdentifier
+    peer_number: PeerIdentifier,
 }
 
 // in: clientMessage out:serverMessage
-pub type ServerToClientCodec= codec::LengthPrefixedJson<ClientMessage, ServerMessage>;
+pub type ServerToClientCodec = codec::LengthPrefixedJson<ClientMessage, ServerMessage>;
 pub type ClientToServerCodec = codec::LengthPrefixedJson<ServerMessage, ClientMessage>;
-
 
 // codec for register message
 //pub type ServerToClientRegister = codec::LengthPrefixedJson<RegisterMessage, RegisterResponse>;
 //pub type ClientToServerRegister = codec::LengthPrefixedJson<RegisterResponse, RegisterMessage>;
-

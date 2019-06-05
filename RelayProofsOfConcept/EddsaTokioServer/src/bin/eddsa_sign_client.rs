@@ -36,8 +36,8 @@ use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
 
 use relay_server_common::{
-    ClientMessage, ClientToServerCodec, MessagePayload, PeerIdentifier, ProtocolIdentifier,
-    RelayMessage, ServerMessage, ServerResponse,
+    resolve_server_msg_type, ClientMessage, ClientToServerCodec, MessagePayload, PeerIdentifier,
+    ProtocolIdentifier, RelayMessage, ServerMessage, ServerMessageType, ServerResponse,
 };
 
 // unique to our eddsa client
@@ -630,7 +630,7 @@ impl<T: Peer> Client<T> {
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
         let last_message = self.last_message.clone().into_inner();
         let mut new_message = None;
-        let msg_type = resolve_server_msg_type(msg.clone());
+        let msg_type = resolve_server_msg_type(&msg);
         match msg_type {
             ServerMessageType::Response => {
                 let next = self.handle_server_response(&msg);
@@ -821,27 +821,6 @@ impl<T: Peer> Client<T> {
             _ => panic!("failed to handle response"),
         }
     }
-}
-
-#[derive(Debug)]
-pub enum ServerMessageType {
-    Response,
-    Abort,
-    RelayMessage,
-    Undefined,
-}
-
-pub fn resolve_server_msg_type(msg: ServerMessage) -> ServerMessageType {
-    if msg.response.is_some() {
-        return ServerMessageType::Response;
-    }
-    if msg.relay_message.is_some() {
-        return ServerMessageType::RelayMessage;
-    }
-    if msg.abort.is_some() {
-        return ServerMessageType::Abort;
-    }
-    return ServerMessageType::Undefined;
 }
 
 pub enum MessageProcessResult {
