@@ -14,7 +14,7 @@ cargo run --package relay-server --bin server -- -P $n &
 sleep 2
 for i in $(seq 1 $n);
 do
-    cargo run --bin eddsa_key_gen_client -- 127.0.0.1:8080 "keys$i" -P $n &
+    cargo run --example eddsa_key_gen_client -- 127.0.0.1:8080 "keys$i" -P $n &
     sleep 1
 done
 
