@@ -4,7 +4,7 @@ use futures::{Future, Sink, Stream};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 use relay_server_common::{
     AbortMessage, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage, ServerResponse,
@@ -56,7 +56,8 @@ pub enum RelaySessionState {
 
 #[derive(Debug, Clone)]
 pub struct RelaySession {
-    peers: Rc<RefCell<HashMap<SocketAddr, Peer>>>,
+    //peers: Rc<RefCell<HashMap<SocketAddr, Peer>>>,
+    peers: Arc<RwLock<HashMap<SocketAddr, Peer>>>,
 
     active_peers: RefCell<u32>,
 
@@ -69,6 +70,14 @@ impl RelaySession {
     /*
         RelaySession Private functions
     */
+    pub fn get_number_of_active_peers(&self) -> u32 {
+        self.peers
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(_, p)| p.registered)
+            .fold(0, |acc, _| acc + 1)
+    }
 
     /// Register a new peer to this relay session
     /// after adding this address as a peer,
@@ -81,12 +90,8 @@ impl RelaySession {
         capacity: u32,
     ) -> Option<u32> {
         let _addr = &addr;
-        let number_of_active_peers = self
-            .peers
-            .borrow()
-            .values()
-            .filter(|p| p.registered)
-            .fold(0, |acc, _| acc + 1);
+        let number_of_active_peers = self.get_number_of_active_peers();
+
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
         println!(
             "-----------------\nPEERS: {:?}\n---------------",
@@ -94,7 +99,7 @@ impl RelaySession {
         );
         match self.can_register(_addr, protocol_descriptor) {
             true => {
-                let mut peers = self.peers.borrow_mut();
+                let mut peers = self.peers.write().unwrap();
                 let peer = peers
                     .get_mut(_addr)
                     .unwrap_or_else(|| panic!("No conection"));
@@ -152,7 +157,7 @@ impl RelaySession {
             }
         }
         // register the peer iff it has an active connection and did not register yet
-        if let Some(peer) = self.peers.borrow().get(addr) {
+        if let Some(peer) = self.peers.read().unwrap().get(addr) {
             return !peer.registered;
         }
         false
@@ -179,8 +184,8 @@ impl RelaySession {
         }
         // validate the sender in the message (peer_number field) is the peer associated with this address
         let sender = msg.peer_number;
-        let mut peers = self.peers.borrow_mut();
-        let peer = peers.get_mut(from);
+        let peers = self.peers.read().unwrap();
+        let peer = peers.get(from);
 
         // if peer is present and registered
         if let Some(p) = peer {
@@ -208,15 +213,15 @@ impl RelaySession {
     /// and an Empty state
     pub fn new(capacity: u32) -> RelaySession {
         RelaySession {
-
-            peers: /*Arc::new(Mutex::new(HashMap::new())),// */(Rc::new(RefCell::new(HashMap::new()))),
+            peers: Arc::new(RwLock::new(HashMap::new())),
 
             active_peers: RefCell::new(0),
 
-            protocol: RefCell::new(relay_server_common::protocol::ProtocolDescriptor::new(0, capacity)),
+            protocol: RefCell::new(relay_server_common::protocol::ProtocolDescriptor::new(
+                0, capacity,
+            )),
 
             state: RefCell::new(RelaySessionState::Empty),
-
         }
     }
 
@@ -224,12 +229,12 @@ impl RelaySession {
     /// the connection is NOT an active peer until it is registered to the session
     /// by sending a register message
     pub fn insert_new_connection(&self, addr: SocketAddr, client: Client) {
-        self.peers.borrow_mut().insert(addr, Peer::new(client));
+        self.peers.write().unwrap().insert(addr, Peer::new(client));
     }
 
     /// Removes a connection from the peers collection
     pub fn remove(&self, addr: &SocketAddr) -> Option<Peer> {
-        self.peers.borrow_mut().remove(addr)
+        self.peers.write().unwrap().remove(addr)
     }
 
     /// Send a message from the server to a group of peers
@@ -240,7 +245,7 @@ impl RelaySession {
         message: ServerMessage,
         to: &Vec<PeerIdentifier>,
     ) -> Box<dyn Future<Item = (), Error = E>> {
-        let peers = self.peers.borrow();
+        let peers = self.peers.read().unwrap();
         // For each client, clone its `mpsc::Sender` (because sending consumes the sender) and
         // start sending a clone of `message`. This produces an iterator of Futures.
         //let all_sends = client_map.values().map(|client| client.tx.clone().send(message.clone()));
@@ -266,23 +271,21 @@ impl RelaySession {
         Box::new(send_stream.for_each(|()| Ok(())))
     }
 
-    /// try to send a server response message
+    /// Try to send a server response to a specific address
     pub fn send_response<E: 'static>(
         &self,
         addr: SocketAddr,
         response: ServerMessage,
     ) -> Box<dyn Future<Item = (), Error = E>> /*-> Result<(),()>*/ {
-        let peers = self.peers.borrow();
+        let peers = self.peers.read().unwrap();
         // For each client, clone its `mpsc::Sender` (b ecause sending consumes the sender) and
         // start sending a clone of `message`. This produces an iterator of Futures.
         //let all_sends = client_map.values().map(|client| client.tx.clone().send(message.clone()));
         if let Some(_peer) = peers.get(&addr) {
-            let mut to = Vec::new();
-            if let Some(peer) = peers.get(&addr) {
-                to.push(peer.peer_id as PeerIdentifier);
-            }
+            let to = vec![_peer.peer_id as PeerIdentifier];
             self.multiple_send(response, &to)
         } else {
+            // TODO: Disconnect peer and end session
             panic!("err")
         }
     }
@@ -295,7 +298,7 @@ impl RelaySession {
     ) -> Box<dyn Future<Item = (), Error = E>> {
         let mut server_msg = ServerMessage::new();
         let mut _to = vec![];
-        let peer_id = self.peers.borrow_mut().get_mut(from).unwrap().peer_id;
+        let peer_id = self.peers.read().unwrap().get(from).unwrap().peer_id;
         let can_relay = self.can_relay(from, &msg);
         match can_relay {
             Ok(()) => {
@@ -358,7 +361,7 @@ impl RelaySession {
                 ));
                 self.state.replace(RelaySessionState::Aborted);
                 let mut to = Vec::new();
-                let peers = self.peers.borrow();
+                let peers = self.peers.read().unwrap();
                 peers.values().filter(|p| p.registered).for_each(|p| {
                     to.push(p.peer_id);
                 });
@@ -378,13 +381,14 @@ impl RelaySession {
         println!("\nconnection closed.");
         let mut to = Vec::new();
         self.peers
-            .borrow()
+            .read()
+            .unwrap()
             .values()
             .filter(|p| p.registered)
             .for_each(|p| {
                 to.push(p.peer_id);
             });
-        let peers = self.peers.borrow();
+        let peers = self.peers.write().unwrap();
         // check if the address was a peer
         let peer = peers.get(&addr);
         let mut peer_disconnected = false;
@@ -415,7 +419,7 @@ impl RelaySession {
 
     /// get a copy of Peer that addr represents
     pub fn get_peer(&self, addr: &SocketAddr) -> Option<Peer> {
-        match self.peers.borrow().get(addr) {
+        match self.peers.read().unwrap().get(addr) {
             Some(p) => match p.registered {
                 true => Some(p.clone()),
                 false => None,
@@ -428,12 +432,19 @@ impl RelaySession {
 #[cfg(test)]
 mod tests {
     use super::RelaySession;
+    use relay_server_common::ProtocolIdentifier;
+    use std::net::SocketAddr;
 
     #[test]
     fn test_add_peer() {
-        let addr: SocketAddr = "127.0.0.1:8081".parse().unwrap();
-        protocol_id: ProtocolIdentifier = "1";
-        capacity: u32 = 1;
-        let rs = RelaySession::new(addr, protocol_id, capacity);
+        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let protocol_id: ProtocolIdentifier = 1;
+        let capacity: u32 = 1;
+        let rs = RelaySession::new(capacity);
+
+        let client_addr: SocketAddr = "127.0.0.1:8081".parse().unwrap();
+
+        let peer_num = rs.register_new_peer(client_addr, protocol_id, capacity);
+        assert_eq!(peer_num, Some(1));
     }
 }
