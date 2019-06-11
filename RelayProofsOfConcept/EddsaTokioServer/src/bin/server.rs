@@ -16,9 +16,7 @@ extern crate structopt;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use relay_server::{
-    resolve_client_msg_type, start_server, Client, ClientMessageType, RelaySession,
-};
+use relay_server::start_server;
 use std::net::SocketAddr;
 use structopt::StructOpt;
 

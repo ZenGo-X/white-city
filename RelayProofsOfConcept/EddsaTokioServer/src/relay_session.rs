@@ -7,8 +7,7 @@ use std::net::SocketAddr;
 use std::rc::Rc;
 
 use relay_server_common::{
-    AbortMessage, ClientMessage, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage,
-    ServerResponse,
+    AbortMessage, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage, ServerResponse,
 };
 
 use relay_server_common::common::{CANT_REGISTER_RESPONSE, NOT_YOUR_TURN, STATE_NOT_INITIALIZED};
@@ -240,7 +239,7 @@ impl RelaySession {
         &self,
         message: ServerMessage,
         to: &Vec<PeerIdentifier>,
-    ) -> Box<Future<Item = (), Error = E>> {
+    ) -> Box<dyn Future<Item = (), Error = E>> {
         let peers = self.peers.borrow();
         // For each client, clone its `mpsc::Sender` (because sending consumes the sender) and
         // start sending a clone of `message`. This produces an iterator of Futures.
@@ -272,7 +271,7 @@ impl RelaySession {
         &self,
         addr: SocketAddr,
         response: ServerMessage,
-    ) -> Box<Future<Item = (), Error = E>> /*-> Result<(),()>*/ {
+    ) -> Box<dyn Future<Item = (), Error = E>> /*-> Result<(),()>*/ {
         let peers = self.peers.borrow();
         // For each client, clone its `mpsc::Sender` (b ecause sending consumes the sender) and
         // start sending a clone of `message`. This produces an iterator of Futures.
@@ -293,7 +292,7 @@ impl RelaySession {
         &self,
         from: &SocketAddr,
         msg: RelayMessage,
-    ) -> Box<Future<Item = (), Error = E>> {
+    ) -> Box<dyn Future<Item = (), Error = E>> {
         let mut server_msg = ServerMessage::new();
         let mut _to = vec![];
         let peer_id = self.peers.borrow_mut().get_mut(from).unwrap().peer_id;
@@ -329,7 +328,7 @@ impl RelaySession {
         addr: SocketAddr,
         protocol_id: ProtocolIdentifier,
         capacity: u32,
-    ) -> Box<Future<Item = (), Error = E>> {
+    ) -> Box<dyn Future<Item = (), Error = E>> {
         let mut server_msg = ServerMessage::new();
         let peer_id = self.register_new_peer(addr, protocol_id, capacity);
         if peer_id.is_some() {
@@ -343,7 +342,7 @@ impl RelaySession {
     }
 
     /// abort this relay session and send abort message to all peers
-    pub fn abort<E: 'static>(&self, addr: SocketAddr) -> Box<Future<Item = (), Error = E>> {
+    pub fn abort<E: 'static>(&self, addr: SocketAddr) -> Box<dyn Future<Item = (), Error = E>> {
         println!("\nAborting");
         let mut server_msg = ServerMessage::new();
         match self.state.clone().into_inner() {
@@ -375,7 +374,7 @@ impl RelaySession {
     pub fn connection_closed<E: 'static>(
         &mut self,
         addr: SocketAddr,
-    ) -> Box<Future<Item = (), Error = E>> {
+    ) -> Box<dyn Future<Item = (), Error = E>> {
         println!("\nconnection closed.");
         let mut to = Vec::new();
         self.peers
@@ -426,24 +425,15 @@ impl RelaySession {
     }
 }
 
-/// get the message type of a given client message
-pub fn resolve_client_msg_type(msg: &ClientMessage) -> ClientMessageType {
-    if msg.register.is_some() {
-        return ClientMessageType::Register;
-    }
-    if msg.relay_message.is_some() {
-        return ClientMessageType::RelayMessage;
-    }
-    if msg.abort.is_some() {
-        return ClientMessageType::Abort;
-    }
-    return ClientMessageType::Undefined;
-}
+#[cfg(test)]
+mod tests {
+    use super::RelaySession;
 
-#[derive(Debug)]
-pub enum ClientMessageType {
-    Register,
-    Abort,
-    RelayMessage,
-    Undefined,
+    #[test]
+    fn test_add_peer() {
+        let addr: SocketAddr = "127.0.0.1:8081".parse().unwrap();
+        protocol_id: ProtocolIdentifier = "1";
+        capacity: u32 = 1;
+        let rs = RelaySession::new(addr, protocol_id, capacity);
+    }
 }

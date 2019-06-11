@@ -14,10 +14,10 @@ use tokio_core::io::Io;
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 
-use relay_server_common::ServerToClientCodec;
+use relay_server_common::{ClientMessageType, ServerToClientCodec};
 
 mod relay_session;
-pub use relay_session::{resolve_client_msg_type, Client, ClientMessageType, RelaySession};
+pub use relay_session::{Client, RelaySession};
 
 /// Starts the relay server
 pub fn start_server(addr: &SocketAddr, capacity: u32) {
@@ -56,28 +56,28 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
             let relay_session_i= relay_session_inner.lock().unwrap();
             let relay_session_inner = &*relay_session_i;
 
-            let msg_type = relay_session::resolve_client_msg_type(&msg);
+            let msg_type = msg.msg_type();
 
             // this is our main logic for receiving messages from peer
             match msg_type {
-                relay_session::ClientMessageType::Register => {
+                ClientMessageType::Register => {
                     let register = msg.register.unwrap();
                     println!("\ngot register message. protocol id requested: {}", register.protocol_id);
                     relay_session_inner.register(addr, register.protocol_id, register.capacity)
                 },
-                relay_session::ClientMessageType::RelayMessage => {
+                ClientMessageType::RelayMessage => {
                     let peer = relay_session_inner.get_peer(&addr).unwrap_or_else(||
                         panic!("not a peer"));
                     println!("\ngot relay message from {}", peer.peer_id);
                     let relay_msg = msg.relay_message.unwrap().clone();
                     relay_session_inner.relay_message(&addr, relay_msg)
                 },
-                relay_session::ClientMessageType::Abort => {
+                ClientMessageType::Abort => {
                     let peer = relay_session_inner.get_peer(&addr).unwrap_or_else(|| panic!("not a peer"));
                     println!("\ngot abort message from {}", peer.peer_id);
                     relay_session_inner.abort(addr)
                 },
-                relay_session::ClientMessageType::Undefined => {
+                ClientMessageType::Undefined => {
                     println!("\nGot unknown or empty message");
                     relay_session_inner.abort(addr)//Box::new(futures::future::ok(())) // TODO this disconnects?
                 }

@@ -5,7 +5,6 @@ extern crate serde;
 extern crate serde_json;
 extern crate tokio_core;
 
-use serde::{Deserialize, Serialize};
 use std::vec::Vec;
 
 mod codec;
@@ -28,7 +27,6 @@ pub struct RelayMessage {
 
 impl RelayMessage {
     pub fn new(peer_number: PeerIdentifier, protocol_id: ProtocolIdentifier) -> RelayMessage {
-        let s = r#"{}"#;
         RelayMessage {
             peer_number,
             protocol_id,
@@ -87,6 +85,14 @@ pub struct RegisterMessage {
     pub capacity: u32,
 }
 
+#[derive(Debug)]
+pub enum ServerMessageType {
+    Response,
+    Abort,
+    RelayMessage,
+    Undefined,
+}
+
 #[derive(Default, Clone, Debug, Deserialize, Serialize)]
 pub struct ServerMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -109,27 +115,19 @@ impl ServerMessage {
             relay_message: None,
         }
     }
-}
 
-#[derive(Debug)]
-pub enum ServerMessageType {
-    Response,
-    Abort,
-    RelayMessage,
-    Undefined,
-}
-
-pub fn resolve_server_msg_type(msg: &ServerMessage) -> ServerMessageType {
-    if msg.response.is_some() {
-        return ServerMessageType::Response;
+    pub fn msg_type(&self) -> ServerMessageType {
+        if self.response.is_some() {
+            return ServerMessageType::Response;
+        }
+        if self.relay_message.is_some() {
+            return ServerMessageType::RelayMessage;
+        }
+        if self.abort.is_some() {
+            return ServerMessageType::Abort;
+        }
+        return ServerMessageType::Undefined;
     }
-    if msg.relay_message.is_some() {
-        return ServerMessageType::RelayMessage;
-    }
-    if msg.abort.is_some() {
-        return ServerMessageType::Abort;
-    }
-    return ServerMessageType::Undefined;
 }
 
 #[derive(Default, Debug, Deserialize, Serialize, Clone)]
@@ -178,6 +176,27 @@ impl ClientMessage {
         }
         false
     }
+
+    pub fn msg_type(&self) -> ClientMessageType {
+        if self.register.is_some() {
+            return ClientMessageType::Register;
+        }
+        if self.relay_message.is_some() {
+            return ClientMessageType::RelayMessage;
+        }
+        if self.abort.is_some() {
+            return ClientMessageType::Abort;
+        }
+        return ClientMessageType::Undefined;
+    }
+}
+
+#[derive(Debug)]
+pub enum ClientMessageType {
+    Register,
+    Abort,
+    RelayMessage,
+    Undefined,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
