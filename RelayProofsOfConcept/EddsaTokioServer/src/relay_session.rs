@@ -380,14 +380,17 @@ impl RelaySession {
     ) -> Box<dyn Future<Item = (), Error = E>> {
         println!("\nconnection closed.");
         let mut to = Vec::new();
-        self.peers
-            .read()
-            .unwrap()
-            .values()
-            .filter(|p| p.registered)
-            .for_each(|p| {
-                to.push(p.peer_id);
-            });
+        // Read registered peers then release the read() lock
+        {
+            self.peers
+                .read()
+                .unwrap()
+                .values()
+                .filter(|p| p.registered)
+                .for_each(|p| {
+                    to.push(p.peer_id);
+                });
+        }
         let peers = self.peers.write().unwrap();
         // check if the address was a peer
         let peer = peers.get(&addr);
@@ -431,20 +434,82 @@ impl RelaySession {
 
 #[cfg(test)]
 mod tests {
+    use super::Client;
     use super::RelaySession;
+    use futures::sync::mpsc;
     use relay_server_common::ProtocolIdentifier;
     use std::net::SocketAddr;
+    use std::sync::{Arc, Mutex, RwLock};
+    use std::thread;
 
     #[test]
     fn test_add_peer() {
-        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        //let server_addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
         let protocol_id: ProtocolIdentifier = 1;
         let capacity: u32 = 1;
         let rs = RelaySession::new(capacity);
 
         let client_addr: SocketAddr = "127.0.0.1:8081".parse().unwrap();
 
+        let (tx, _) = mpsc::channel(0); //(8);
+
+        rs.insert_new_connection(client_addr.clone(), Client::new(tx));
+
         let peer_num = rs.register_new_peer(client_addr, protocol_id, capacity);
         assert_eq!(peer_num, Some(1));
+    }
+
+    #[test]
+    fn test_add_multi_peers() {
+        //let server_addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+
+        let protocol_id: ProtocolIdentifier = 1;
+        let capacity: u32 = 5;
+        let rs = RelaySession::new(capacity);
+
+        let mut peer_num: u32 = 0;
+        for i in 0..capacity {
+            let client_addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().unwrap();
+            let (tx, _) = mpsc::channel(0); //(8);
+            rs.insert_new_connection(client_addr.clone(), Client::new(tx));
+            peer_num = rs
+                .register_new_peer(client_addr, protocol_id, capacity)
+                .expect("Unable to register");
+        }
+
+        assert_eq!(peer_num, capacity);
+    }
+
+    #[test]
+    fn test_add_multi_peers_in_parallel() {
+        let mut children = vec![];
+
+        let protocol_id: ProtocolIdentifier = 1;
+        let capacity: u32 = 5;
+        let rs = Arc::new(Mutex::new(RelaySession::new(capacity)));
+
+        for i in 0..capacity {
+            let rs_inner = Arc::clone(&rs);
+
+            let client_addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().unwrap();
+            let (tx, _) = mpsc::channel(0);
+            children.push(thread::spawn(move || {
+                rs_inner
+                    .lock()
+                    .unwrap()
+                    .insert_new_connection(client_addr.clone(), Client::new(tx));
+                rs_inner
+                    .lock()
+                    .unwrap()
+                    .register_new_peer(client_addr, protocol_id, capacity)
+                    .expect("Unable to register");
+            }));
+        }
+
+        for child in children {
+            let _ = child.join();
+        }
+        let number_of_active_peers = rs.lock().unwrap().get_number_of_active_peers();
+        assert_eq!(number_of_active_peers, capacity);
     }
 }

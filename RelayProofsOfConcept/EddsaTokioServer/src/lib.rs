@@ -53,8 +53,7 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
         // define future for receiving half
         let relay_session_inner = Arc::clone(&relay_session);
         let reader = from_client.for_each(move |msg| {
-            let relay_session_i= relay_session_inner.lock().unwrap();
-            let relay_session_inner = &*relay_session_i;
+            let relay_session_inner= relay_session_inner.lock().unwrap();
 
             let msg_type = msg.msg_type();
 
