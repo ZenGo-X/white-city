@@ -4,6 +4,8 @@ extern crate relay_server_common;
 extern crate structopt;
 extern crate tokio;
 extern crate tokio_core;
+#[macro_use]
+extern crate log;
 
 use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
@@ -26,14 +28,14 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
     let handle = core.handle();
 
     let listener = TcpListener::bind(&addr, &handle).unwrap();
-    println!("\nListening on: {}", addr);
+    info!("\nListening on: {}", addr);
 
     // Create the session fot the relay server
     let relay_session = Arc::new(Mutex::new(relay_session::RelaySession::new(capacity)));
 
     let srv = listener.incoming().for_each(move |(socket, addr)| {
         // Got a new connection
-        println!("\nserver got a new connection");
+        info!("\nserver got a new connection");
 
         // Frame the socket with JSON codec
         let framed_socket = socket.framed(ServerToClientCodec::new());

@@ -56,7 +56,6 @@ pub enum RelaySessionState {
 
 #[derive(Debug, Clone)]
 pub struct RelaySession {
-    //peers: Rc<RefCell<HashMap<SocketAddr, Peer>>>,
     peers: Arc<RwLock<HashMap<SocketAddr, Peer>>>,
 
     active_peers: RefCell<u32>,

@@ -9,36 +9,48 @@
 //!     cargo +nightly run --example connect 127.0.0.1:8080
 //! this will run a client that utilizes the server in some way
 extern crate chrono;
+extern crate clap;
 extern crate futures;
 extern crate relay_server;
 extern crate relay_server_common;
-extern crate structopt;
 extern crate tokio_core;
 extern crate tokio_io;
 
+use clap::{App, Arg, ArgMatches};
 use relay_server::start_server;
 use std::net::SocketAddr;
-use structopt::StructOpt;
 
-// Argument parsing
-#[derive(StructOpt, Debug)]
-#[structopt(name = "relay-server")]
-struct Opt {
-    /// Number of participants in the protocol
-    #[structopt(short = "P", long = "participants", default_value = "2")]
-    capacity: u32,
-
-    /// Address the server listens on
-    #[structopt(name = "ADDRESS", default_value = "127.0.0.1:8080")]
-    address: String,
+fn arg_matches<'a>() -> ArgMatches<'a> {
+    App::new("relay-server")
+        .arg(
+            Arg::with_name("address")
+                .default_value("127.0.0.1:8080")
+                .value_name("<HOST:PORT>"),
+        )
+        .arg(
+            Arg::with_name("capacity")
+                .default_value("2")
+                .short("P")
+                .long("participants"),
+        )
+        .get_matches()
 }
 
 fn main() {
-    let opt = Opt::from_args();
+    let matches = arg_matches();
 
-    let addr = opt.address;
-    let addr: SocketAddr = addr.parse().expect("Unable to parse socket address");
+    let addr: SocketAddr = matches
+        .value_of("address")
+        .unwrap()
+        .parse()
+        .expect("Unable to parse socket address");
     println!("{:?}", addr);
 
-    start_server(&addr, opt.capacity);
+    let capacity: u32 = matches
+        .value_of("capacity")
+        .unwrap()
+        .parse()
+        .expect("Invalid number of participants");
+
+    start_server(&addr, capacity);
 }
