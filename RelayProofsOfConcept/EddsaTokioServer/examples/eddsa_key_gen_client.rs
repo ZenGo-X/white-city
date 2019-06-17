@@ -564,7 +564,8 @@ impl<T: Peer> Client<T> {
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) => {
-                        return Ok(msg.clone());
+                        //return Ok(msg.clone());
+                        return Ok(ClientMessage::new());
                     }
                     None => {
                         panic!("No message to resend");
@@ -574,11 +575,12 @@ impl<T: Peer> Client<T> {
             not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
                 // wait
                 //    self.wait_timeout();
-                //              println!("sending again");
+                println!("Not initialized, sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) => {
-                        return Ok(msg.clone());
+                        return Ok(ClientMessage::new());
+                        //return Ok(msg.clone());
                     }
                     None => {
                         panic!("No message to resend");
@@ -666,7 +668,7 @@ fn main() {
     // Create the event loop and initiate the connection to the remote server
     let mut core = Core::new().unwrap();
     let handle = core.handle();
-    let _tcp = TcpStream::connect(&addr, &handle);
+    let tcp = TcpStream::connect(&addr, &handle);
 
     let mut count = Arc::new(AtomicUsize::new(0));
 
@@ -676,58 +678,54 @@ fn main() {
             PROTOCOL_CAPACITY_ARG,
             &message_to_sign,
         )))));
-    let client = _tcp
-        .and_then(|stream| {
-            //println!("sending register message");
-            let framed_stream = stream.framed(ClientToServerCodec::new());
-            let mut session_ = session.lock().unwrap();
-            let msg = session_.0.get_mut().generate_register_message();
 
-            // send register message to server
-            let send_ = framed_stream.send(msg);
-            let session_inner = Arc::clone(&session);
-            let count_inner = Arc::clone(&count);
-            send_.and_then(|stream| {
-                let (tx, rx) = stream.split();
-                let client = rx
-                    .then(move |msg| {
-                        let mut session_i = session_inner.lock().unwrap();
-                        let session_inner = session_i.0.get_mut();
-                        if msg.is_err() {
-                            println!("got error instead of message from server");
-                            return Ok(ClientMessage::new());
-                        }
-                        let result = session_inner.generate_client_answer(msg.unwrap());
-                        match result {
-                            Some(_msg) => {
-                                return Ok(_msg);
-                            }
-                            None => return Ok(ClientMessage::new()),
-                        }
-                    })
-                    .then(|msg| {
-                        match msg {
-                            // placeholder for debugging before message forwarding
-                            Ok(x) => {
-                                //println!("forwarding {:?}",x);
-                                Ok(x)
-                            }
-                            Err(e) => Err(e),
-                        }
-                    })
-                    .forward(tx);
-                client
+    let handshake = tcp.and_then(|stream| {
+        let handshake_io = stream.framed(ClientToServerCodec::new());
+        let mut session_ = session.lock().unwrap();
+        let msg = session_.0.get_mut().generate_register_message();
+        handshake_io
+            .send(msg)
+            .map(|handshake_io| handshake_io.into_inner())
+    });
 
-                //            client.map_err(|err|{println!("ERROR CLIENT: {:?}",err);err})
-            })
-        })
-        .map_err(|err| {
-            // All tasks must have an `Error` type of `()`. This forces error
-            // handling and helps avoid silencing failures.
-            //
-            // In our example, we are only going to log the error to STDOUT.
-            println!("connection error = {:?}", err);
+    let client = handshake.and_then(|socket| {
+        let mut session_ = session.lock().unwrap();
+        let msg = session_.0.get_mut().generate_register_message();
+
+        // send register message to server
+        let session_inner = Arc::clone(&session);
+        let count_inner = Arc::clone(&count);
+        let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
+        let (tx, rx) = mpsc::channel(0);
+        let reader = from_server.for_each(move |msg| {
+            println!("Received {:?}", msg);
+            let mut session_i = session_inner.lock().unwrap();
+            let session_inner = session_i.0.get_mut();
+            let response = session_inner.generate_client_answer(msg).unwrap();
+            //let result = session_inner.generate_client_answer(msg.unwrap());
+            println!("Returning {:?}", response);
+            tx.clone().send(response.clone()).then(|_| Ok(()))
         });
 
-    core.run(client); //.unwrap();
+        //let writer = rx.for_each(|msg| to_server.send(msg)).map(|_| ());
+        let writer = rx
+            .map_err(|()| unreachable!("rx can't fail"))
+            .fold(Some(to_server), |to_server, msg| {
+                if msg.is_empty() {
+                    println!("Response is empty");
+                    None
+                } else {
+                    println!("Response is {:?}", msg);
+                    Some(to_server.unwrap().send(msg))
+                }
+            })
+            .map(|_| ());
+
+        reader
+            .select(writer)
+            .map(|_| println!("Closing connection"))
+            .map_err(|(err, _)| err)
+    });
+
+    core.run(client).unwrap();
 }

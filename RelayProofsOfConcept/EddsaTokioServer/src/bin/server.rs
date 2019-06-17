@@ -10,14 +10,18 @@
 //! this will run a client that utilizes the server in some way
 extern crate chrono;
 extern crate clap;
+extern crate fern;
 extern crate futures;
 extern crate relay_server;
 extern crate relay_server_common;
 extern crate tokio_core;
 extern crate tokio_io;
+#[macro_use]
+extern crate log;
 
 use clap::{App, Arg, ArgMatches};
 use relay_server::start_server;
+use std::io;
 use std::net::SocketAddr;
 
 fn arg_matches<'a>() -> ArgMatches<'a> {
@@ -33,7 +37,69 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
                 .short("P")
                 .long("participants"),
         )
+        .arg(
+            Arg::with_name("verbose")
+                .short("v")
+                .long("verbose")
+                .multiple(true)
+                .help("Increases logging verbosity each use for up to 3 times"),
+        )
         .get_matches()
+}
+
+fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
+    let mut base_config = fern::Dispatch::new();
+
+    base_config = match verbosity {
+        0 => base_config.level(log::LevelFilter::Info),
+        1 => base_config
+            .level(log::LevelFilter::Debug)
+            .level_for("tokio_core", log::LevelFilter::Warn) // filter out tokio
+            .level_for("tokio_reactor", log::LevelFilter::Warn),
+        _2_or_more => base_config.level(log::LevelFilter::Trace),
+    };
+
+    // Separate file config so we can include year, month and day in file logs
+    let file_config = fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{}[{}][{}] {} {}",
+                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
+                record.target(),
+                record.level(),
+                line!(),
+                message
+            ))
+        })
+        .chain(fern::log_file("relay-server.log")?);
+
+    let stdout_config = fern::Dispatch::new()
+        .format(|out, message, record| {
+            // special format for debug messages coming from our own crate.
+            if record.level() > log::LevelFilter::Info && record.target() == "relay_server" {
+                out.finish(format_args!(
+                    "---\nDEBUG: {}: {}\n---",
+                    chrono::Local::now().format("%H:%M:%S"),
+                    message
+                ))
+            } else {
+                out.finish(format_args!(
+                    "[{}][{}][{}] {} ",
+                    chrono::Local::now().format("%H:%M:%S"),
+                    record.target(),
+                    record.level(),
+                    message
+                ))
+            }
+        })
+        .chain(io::stdout());
+
+    base_config
+        .chain(file_config)
+        .chain(stdout_config)
+        .apply()?;
+
+    Ok(())
 }
 
 fn main() {
@@ -44,13 +110,16 @@ fn main() {
         .unwrap()
         .parse()
         .expect("Unable to parse socket address");
-    println!("{:?}", addr);
 
     let capacity: u32 = matches
         .value_of("capacity")
         .unwrap()
         .parse()
         .expect("Invalid number of participants");
+
+    let verbosity: u64 = matches.occurrences_of("verbose");
+
+    setup_logging(verbosity).expect("failed to initialize logging.");
 
     start_server(&addr, capacity);
 }

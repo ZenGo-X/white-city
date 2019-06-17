@@ -28,7 +28,7 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
     let handle = core.handle();
 
     let listener = TcpListener::bind(&addr, &handle).unwrap();
-    info!("\nListening on: {}", addr);
+    info!("Listening on: {}", addr);
 
     // Create the session fot the relay server
     let relay_session = Arc::new(Mutex::new(relay_session::RelaySession::new(capacity)));
@@ -63,23 +63,23 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
             match msg_type {
                 ClientMessageType::Register => {
                     let register = msg.register.unwrap();
-                    println!("\ngot register message. protocol id requested: {}", register.protocol_id);
+                    info!("Got register message. protocol id requested: {}", register.protocol_id);
                     relay_session_inner.register(addr, register.protocol_id, register.capacity)
                 },
                 ClientMessageType::RelayMessage => {
                     let peer = relay_session_inner.get_peer(&addr).unwrap_or_else(||
                         panic!("not a peer"));
-                    println!("\ngot relay message from {}", peer.peer_id);
+                    info!("Got relay message from {}", peer.peer_id);
                     let relay_msg = msg.relay_message.unwrap().clone();
                     relay_session_inner.relay_message(&addr, relay_msg)
                 },
                 ClientMessageType::Abort => {
                     let peer = relay_session_inner.get_peer(&addr).unwrap_or_else(|| panic!("not a peer"));
-                    println!("\ngot abort message from {}", peer.peer_id);
+                    debug!("\ngot abort message from {}", peer.peer_id);
                     relay_session_inner.abort(addr)
                 },
                 ClientMessageType::Undefined => {
-                    println!("\nGot unknown or empty message");
+                    warn!("\nGot unknown or empty message");
                     relay_session_inner.abort(addr)//Box::new(futures::future::ok(())) // TODO this disconnects?
                 }
             }
@@ -105,10 +105,10 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
         // map & map_err here are used for the case reading half or writing half is dropped
         // in which case we will be dropping the other half as well
         let relay_session_inner = Arc::clone(&relay_session);
-        handle.spawn(connection.map(|_| ()).map_err(|(err, _)| {println!("\nERROR OCCURED: {:?}",err);err})
+        handle.spawn(connection.map(|_| ()).map_err(|(err, _)| {error!("\nERROR OCCURED: {:?}",err);err})
             .then(move |_| {
                 // connection is closed
-                println!("\nDisconnected");
+                error!("\nDisconnected");
 
                 // this means either a peer disconnected - same as abort,
                 // or an active connection closed - which is allowed

@@ -19,6 +19,8 @@ hex = "0.3.2"
 structopt = "0.2"
 log = "0.4"
 clap = "2.0"
+fern = "0.5"
+
 
 relay-server-common = { path = "../EddsaTokioServer/relay-server-common" }
 
