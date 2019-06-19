@@ -348,8 +348,7 @@ impl RelaySession {
                 // Convert the stream to a future that runs all the sends and box it up.
                 Box::new(send_stream.for_each(|()| Ok(())))
             }
-            _ => self.send_response(addr, server_msg)
-            //_ => Box::new(futures::future::ok(())),
+            _ => Box::new(futures::future::ok(())),
         }
     }
 

@@ -1,15 +1,7 @@
-extern crate chrono;
-extern crate dict;
-///
 /// Implementation of a client that communicates with the relay server
 /// This client represents eddsa peer
 ///
 ///
-extern crate futures;
-extern crate relay_server_common;
-extern crate structopt;
-extern crate tokio_core;
-
 use std::cell::RefCell;
 use std::env;
 
@@ -36,23 +28,14 @@ use relay_server_common::{
     RelayMessage, ServerMessage, ServerMessageType, ServerResponse,
 };
 
-// unique to our eddsa client
-extern crate curv;
-extern crate multi_party_ed25519;
-
 use curv::elliptic::curves::ed25519::*;
 
-use curv::elliptic::curves::traits::ECScalar;
-use curv::{BigInt, FE, GE};
+use curv::GE;
 
-use multi_party_ed25519::protocols::aggsig::{
-    test_com, EphemeralKey, KeyAgg, KeyPair, SignFirstMsg, SignSecondMsg, Signature,
-};
-//use multi_party_ed25519::
+use multi_party_ed25519::protocols::aggsig::{EphemeralKey, KeyAgg, KeyPair};
 
 use relay_server_common::common::*;
 
-use dict::DictIface;
 use std::collections::HashMap;
 use std::fs;
 
@@ -94,7 +77,7 @@ struct EddsaPeer {
     pub message: &'static [u8],
 
     pub agg_key: Option<KeyAgg>,
-    pub R_tot: Option<GE>,
+    pub r_tot: Option<GE>,
 
     // indicators for which of this peers messages were accepted
     pub pk_accepted: bool,
@@ -114,27 +97,6 @@ impl EddsaPeer {
     fn add_pk(&mut self, peer_id: PeerIdentifier, pk: Ed25519Point) {
         self.pks.insert(peer_id, pk);
     }
-    fn add_commitment(&mut self, peer_id: PeerIdentifier, commitment: String) {
-        self.commitments.insert(peer_id, commitment);
-    }
-    fn add_r(&mut self, peer_id: PeerIdentifier, r: String) {
-        //let v = (r,blind_factor);
-        self.r_s.insert(peer_id, r);
-    }
-    fn add_sig(&mut self, peer_id: PeerIdentifier, sig: String) {
-        self.sigs.insert(peer_id, sig);
-    }
-    fn compute_r_tot(&mut self) -> GE {
-        let mut Ri: Vec<GE> = Vec::new();
-        for (_peer_id, r) in &self.r_s {
-            let r_slice: &str = &r[..];
-            let _r: SignSecondMsg =
-                serde_json::from_str(r_slice).unwrap_or_else(|_e| panic!("serialization error"));
-            Ri.push(_r.R.clone());
-        }
-        let r_tot = Signature::get_R_tot(Ri);
-        return r_tot;
-    }
     fn aggregate_pks(&mut self) -> KeyAgg {
         println!("aggregating pks");
         let _cap = self.capacity as usize;
@@ -150,39 +112,6 @@ impl EddsaPeer {
         let agg_key = KeyPair::key_aggregation_n(&pks, &index);
         return agg_key;
     }
-
-    fn validate_commitments(&mut self) -> bool {
-        // iterate over all peer Rs
-        println!("----------\nvalidating commitments\n----------");
-        let eight: FE = ECScalar::from(&BigInt::from(8));
-        let eight_inv = eight.invert();
-        let r_s = &self.r_s;
-        for (peer_id, r) in r_s {
-            println!("peer: {:}", peer_id);
-            println!("r: {:}", r);
-            // convert the json_string to a construct
-            let _r: SignSecondMsg = serde_json::from_str(r).unwrap();
-
-            // get the corresponding commitment
-            let k = peer_id.clone();
-            let cmtmnt = self
-                .commitments
-                .get(&k)
-                .expect("peer didn't send commitment");
-            println!("commitment : {:?}", cmtmnt);
-            let commitment: SignFirstMsg = serde_json::from_str(cmtmnt).unwrap();
-            // if we couldn't validate the commitment - failure
-            if !test_com(
-                &(_r.R * eight_inv),
-                &_r.blind_factor,
-                &commitment.commitment,
-            ) {
-                return false;
-            }
-        }
-        println!("----------\ncommitments valid\n----------");
-        true
-    }
 }
 
 impl EddsaPeer {
@@ -190,7 +119,7 @@ impl EddsaPeer {
     pub fn update_data_step_0(&mut self, from: PeerIdentifier, payload: MessagePayload) {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
-            MessagePayloadType::PUBLIC_KEY(pk) => {
+            MessagePayloadType::PublicKey(pk) => {
                 let peer_id = self.peer_id.clone().into_inner();
                 if from == peer_id {
                     self.pk_accepted = true;
@@ -203,7 +132,6 @@ impl EddsaPeer {
                     Err(_e) => panic!("Could not serialize public key"),
                 }
             }
-            _ => panic!("expected public key message"),
         }
     }
 }
@@ -217,15 +145,10 @@ impl EddsaPeer {
     }
     pub fn is_done_step_0(&mut self) -> bool {
         if self.pks.len() == self.capacity as usize {
-            self.finalize();
+            self.finalize().expect("Finalized falied");
             return true;
         }
         false
-    }
-
-    /// Check if peer should finalize the session
-    pub fn should_finalize(&mut self) -> bool {
-        self.is_done()
     }
 }
 
@@ -238,7 +161,7 @@ impl EddsaPeer {
         let msg_payload = String::from(split_msg[1].clone());
         match msg_prefix {
             pk_prefix if pk_prefix == String::from(PK_MESSAGE_PREFIX) => {
-                return MessagePayloadType::PUBLIC_KEY(msg_payload);
+                return MessagePayloadType::PublicKey(msg_payload);
             }
             _ => panic!("Unknown relay message prefix"),
         }
@@ -258,7 +181,7 @@ impl Peer for EddsaPeer {
             peer_id: RefCell::new(0),
             agg_key: None,
             current_step: 0,
-            R_tot: None,
+            r_tot: None,
             ephemeral_key: None,
             pk_accepted: false,
             commitment_accepted: false,
@@ -402,7 +325,7 @@ impl<T: Peer> ProtocolDataManager<T> {
     }
 }
 
-struct Client_W<T>(RefCell<Client<T>>)
+struct ClientW<T>(RefCell<Client<T>>)
 where
     T: Peer;
 
@@ -633,11 +556,7 @@ impl<T: Peer> Client<T> {
                     }
                 }
             }
-            // ServerResponse::GeneralResponse(msg) => {
-            //     unimplemented!()
-            //   },
             ServerResponse::NoResponse => unimplemented!(),
-            _ => panic!("failed to handle response"),
         }
     }
 }
@@ -652,24 +571,24 @@ pub enum MessageProcessResult {
 enum MessagePayloadType {
     /// Types of expected relay messages
     /// for step 0 we expect PUBLIC_KEY_MESSAGE
-    /// for step 1 we expect COMMITMENT
-    /// for step 2 we expect R_MESSAGE
-    /// for step 3 we expect SIGNATURE
-    PUBLIC_KEY(String),
-    COMMITMENT(String),
-    R_MESSAGE(String),
-    SIGNATURE(String),
+    /// for step 1 we expect Commitment
+    /// for step 2 we expect RMessage
+    /// for step 3 we expect Signature
+    PublicKey(String),
+    // Commitment(String),
+    // RMessage(String),
+    // Signature(String),
 }
 
-static message_to_sign: [u8; 4] = [79, 77, 69, 82];
+static MESSAGE_TO_SIGN: [u8; 4] = [79, 77, 69, 82];
 
 fn main() {
     let opt = Opt::from_args();
 
     let addr = opt.address;
 
-    let PROTOCOL_IDENTIFIER_ARG = 1;
-    let PROTOCOL_CAPACITY_ARG = opt.capacity;
+    let protocol_identifier_arg = 1;
+    let protocol_capacity_arg = opt.capacity;
 
     let addr = addr.parse::<SocketAddr>().unwrap();
 
@@ -678,13 +597,13 @@ fn main() {
     let handle = core.handle();
     let tcp = TcpStream::connect(&addr, &handle);
 
-    let count = Arc::new(AtomicUsize::new(0));
+    let _count = Arc::new(AtomicUsize::new(0));
 
-    let session: Arc<Mutex<Client_W<EddsaPeer>>> =
-        Arc::new(Mutex::new(Client_W(RefCell::new(Client::new(
-            PROTOCOL_IDENTIFIER_ARG,
-            PROTOCOL_CAPACITY_ARG,
-            &message_to_sign,
+    let session: Arc<Mutex<ClientW<EddsaPeer>>> =
+        Arc::new(Mutex::new(ClientW(RefCell::new(Client::new(
+            protocol_identifier_arg,
+            protocol_capacity_arg,
+            &MESSAGE_TO_SIGN,
         )))));
 
     let handshake = tcp.and_then(|stream| {

@@ -623,6 +623,21 @@ impl<T: Peer> Client<T> {
         }
     }
 
+    pub fn respond_to_server<E: 'static>(
+        &mut self,
+        msg: ServerMessage,
+        // A sender to pass messages to be written back to the server
+        tx: mpsc::Sender<ClientMessage>,
+    ) -> Box<dyn Future<Item = (), Error = E>> {
+        let response = self.generate_client_answer(msg).unwrap();
+        println!("Returning {:?}", response);
+        if response.is_empty() {
+            Box::new(futures::future::ok(()))
+        } else {
+            Box::new(tx.clone().send(response.clone()).then(|_| Ok(())))
+        }
+    }
+
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
         let last_message = self.last_message.clone().into_inner();
         let mut new_message = None;
@@ -881,7 +896,6 @@ fn main() {
         let mut session_ = session.lock().unwrap();
         let _msg = session_.0.get_mut().generate_register_message();
 
-        // send register message to server
         let session_inner = Arc::clone(&session);
         let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
         let (tx, rx) = mpsc::channel(0);
@@ -889,9 +903,7 @@ fn main() {
             println!("Received {:?}", msg);
             let mut session_i = session_inner.lock().unwrap();
             let session_inner = session_i.0.get_mut();
-            let response = session_inner.generate_client_answer(msg).unwrap();
-            println!("Returning {:?}", response);
-            tx.clone().send(response.clone()).then(|_| Ok(()))
+            session_inner.respond_to_server(msg, tx.clone())
         });
 
         //let writer = rx.for_each(|msg| to_server.send(msg)).map(|_| ());
