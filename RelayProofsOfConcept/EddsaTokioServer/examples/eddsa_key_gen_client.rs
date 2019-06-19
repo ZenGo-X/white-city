@@ -698,10 +698,7 @@ fn main() {
         //let writer = rx.for_each(|msg| to_server.send(msg)).map(|_| ());
         let writer = rx
             .map_err(|()| unreachable!("rx can't fail"))
-            .fold(Some(to_server), |to_server, msg| {
-                println!("Response is {:?}", msg);
-                Some(to_server.unwrap().send(msg))
-            })
+            .fold(to_server, |to_server, msg| to_server.send(msg))
             .map(|_| ());
 
         reader
