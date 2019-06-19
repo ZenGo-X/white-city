@@ -92,10 +92,7 @@ impl RelaySession {
         let number_of_active_peers = self.get_number_of_active_peers();
 
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
-        info!(
-            "-----------------\nPEERS: {:?}\n---------------",
-            self.peers
-        );
+        info!("-----------------PEERS: {:?}---------------", self.peers);
         match self.can_register(_addr, protocol_descriptor) {
             true => {
                 let mut peers = self.peers.write().unwrap();
@@ -123,7 +120,7 @@ impl RelaySession {
                 return Some(number_of_active_peers + 1); //peer_id
             }
             false => {
-                warn!("\nunable to register {:}", addr); // error
+                warn!("Unable to register {:}", addr); // error
                 None
             }
         }
@@ -136,7 +133,7 @@ impl RelaySession {
             // if this is the first peer to register
             // check that the protocol is valid
             RelaySessionState::Empty => {
-                debug!("\nchecking if protocol description is valid");
+                debug!("Checking if protocol description is valid");
                 if !relay_server_common::protocol::is_valid_protocol(&protocol) {
                     warn!("Protocol is invalid");
 
@@ -146,7 +143,7 @@ impl RelaySession {
             // if there is already a set protocol,
             // check that the peer wants to register to the set protocol
             RelaySessionState::Uninitialized => {
-                debug!("\nchecking if protocol description is same as at protocol description");
+                debug!("Checking if protocol description is same as at protocol description");
                 let prot = self.protocol.clone().into_inner();
                 if !(prot.id == protocol.id && prot.capacity == protocol.capacity) {
                     warn!("Protocol description does not fit current configuration");
@@ -154,7 +151,7 @@ impl RelaySession {
                 }
             }
             _ => {
-                debug!("\nRelay session state is neither empty nor uninitialized ");
+                debug!("Relay session state is neither empty nor uninitialized ");
                 return false;
             }
         }
@@ -177,10 +174,10 @@ impl RelaySession {
 
         match self.state.clone().into_inner() {
             RelaySessionState::Initialized => {
-                debug!("\nRelay sessions state is initialized");
+                debug!("Relay sessions state is initialized");
             }
             _ => {
-                debug!("\nRelay sessions state is not initialized");
+                debug!("Relay sessions state is not initialized");
                 return Err(STATE_NOT_INITIALIZED);
             }
         }
@@ -301,20 +298,16 @@ impl RelaySession {
             Ok(()) => {
                 server_msg.relay_message = Some(msg.clone());
                 _to = msg.to;
-                //                let sender_index = _to.iter().position(|x| *x == peer_id);
-                //                if sender_index.is_some(){
-                //                    _to.remove(sender_index.unwrap());
-                //                }
                 self.protocol.borrow().advance_turn();
 
                 debug!(
-                    "\nsending relay message from peer {:?} to: {:?}",
+                    "Sending relay message from peer {:?} to: {:?}",
                     peer_id, _to
                 );
             }
             Err(err_msg) => {
                 // send an error response to sender
-                warn!("\n{:} can not relay", peer_id);
+                warn!("Peer {:} can not relay", peer_id);
                 server_msg.response = Some(ServerResponse::ErrorResponse(String::from(err_msg)));
                 _to = vec![peer_id];
             }
@@ -337,18 +330,36 @@ impl RelaySession {
                 CANT_REGISTER_RESPONSE,
             )));
         }
-        self.send_response(addr, server_msg)
+        // Send message to al
+        match self.state.clone().into_inner() {
+            RelaySessionState::Initialized => {
+                // Once server is initialized, send register message to all
+                let peers = self.peers.read().unwrap();
+                let sends = peers.iter().map(|(_addr, peer)| {
+                    let mut server_msg = ServerMessage::new();
+                    server_msg.response = Some(ServerResponse::Register(peer.peer_id));
+                    debug!("Sending msg to peer {}: {:?}", peer.peer_id, server_msg);
+                    peer.client.tx.clone().send(server_msg.clone())
+                });
+
+                let send_stream = stream::futures_unordered(sends).then(|_| Ok(()));
+
+                // Convert the stream to a future that runs all the sends and box it up.
+                Box::new(send_stream.for_each(|()| Ok(())))
+            }
+            _ => Box::new(futures::future::ok(())),
+        }
     }
 
     /// abort this relay session and send abort message to all peers
     pub fn abort<E: 'static>(&self, addr: SocketAddr) -> Box<dyn Future<Item = (), Error = E>> {
-        info!("\nAborting");
+        info!("Aborting");
         let mut server_msg = ServerMessage::new();
         match self.state.clone().into_inner() {
             RelaySessionState::Initialized => {}
             _ => return Box::new(futures::future::ok(())),
         }
-        let peer = self.get_peer(&addr);
+        let peer = self.get_peer_by_address(&addr);
         match peer {
             Some(p) => {
                 server_msg.abort = Some(AbortMessage::new(
@@ -401,7 +412,7 @@ impl RelaySession {
                 } else {
                     peer_id = p.peer_id;
                     peer_disconnected = true;
-                    info!("\naborted from peer #: {:}", peer_id);
+                    info!("Aborted from peer #: {:}", peer_id);
                 }
             }
         }
@@ -419,7 +430,7 @@ impl RelaySession {
     }
 
     /// get a copy of Peer that addr represents
-    pub fn get_peer(&self, addr: &SocketAddr) -> Option<Peer> {
+    pub fn get_peer_by_address(&self, addr: &SocketAddr) -> Option<Peer> {
         match self.peers.read().unwrap().get(addr) {
             Some(p) => match p.registered {
                 true => Some(p.clone()),
@@ -437,7 +448,7 @@ mod tests {
     use futures::sync::mpsc;
     use relay_server_common::ProtocolIdentifier;
     use std::net::SocketAddr;
-    use std::sync::{Arc, Mutex, RwLock};
+    use std::sync::{Arc, Mutex};
     use std::thread;
 
     #[test]

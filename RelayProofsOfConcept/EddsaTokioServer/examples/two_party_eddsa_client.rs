@@ -1,4 +1,3 @@
-#![feature(refcell_replace_swap)]
 extern crate chrono;
 extern crate dict;
 ///
@@ -10,16 +9,16 @@ extern crate futures;
 extern crate relay_server_common;
 extern crate tokio_core;
 
-use chrono::prelude::*;
+
 
 use std::cell::RefCell;
 use std::env;
-use std::io::{self, Read, Write};
+
 use std::net::SocketAddr;
 use std::vec::Vec;
 use std::{thread, time};
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize};
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -27,8 +26,8 @@ use tokio_core::io::Io;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Core;
 
-use futures::stream;
-use futures::sync::mpsc;
+
+
 use futures::{Future, Sink, Stream};
 
 use relay_server_common::{
@@ -52,7 +51,7 @@ use multi_party_ed25519::protocols::aggsig::{
 
 use relay_server_common::common::*;
 
-use dict::{Dict, DictIface};
+use dict::{DictIface};
 use std::collections::HashMap;
 
 struct EddsaPeer {
@@ -108,10 +107,10 @@ impl EddsaPeer {
     }
     fn compute_r_tot(&mut self) -> GE {
         let mut Ri: Vec<GE> = Vec::new();
-        for (peer_id, r) in &self.r_s {
+        for (_peer_id, r) in &self.r_s {
             let r_slice: &str = &r[..];
             let _r: SignSecondMsg =
-                serde_json::from_str(r_slice).unwrap_or_else(|e| panic!("serialization error"));
+                serde_json::from_str(r_slice).unwrap_or_else(|_e| panic!("serialization error"));
             Ri.push(_r.R.clone());
         }
         let r_tot = Signature::get_R_tot(Ri);
@@ -119,11 +118,11 @@ impl EddsaPeer {
     }
     fn aggregate_pks(&mut self) -> KeyAgg {
         println!("aggregating pks");
-        let cap = self.capacity as usize;
+        let _cap = self.capacity as usize;
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for index in 0..self.capacity {
             let peer = index + 1;
-            let mut pk = self.pks.get_mut(&peer).unwrap(); //_or_else(||{println!("dont have peers pk");});
+            let pk = self.pks.get_mut(&peer).unwrap(); //_or_else(||{println!("dont have peers pk");});
             pks.push(pk.clone());
         }
         println!("# of public keys : {:?}", pks.len());
@@ -182,7 +181,7 @@ impl EddsaPeer {
                 println!("-------Got peer # {:} pk! {:?}", from, pk);
                 match _pk {
                     Ok(_pk) => self.add_pk(from, _pk),
-                    Err(e) => panic!("Could not serialize public key"),
+                    Err(_e) => panic!("Could not serialize public key"),
                 }
             }
             _ => panic!("expected public key message"),
@@ -285,15 +284,15 @@ impl EddsaPeer {
 
         self.ephemeral_key = Some(ephemeral_key);
         // save the commitment
-        let peer_id = self.peer_id.clone().into_inner();
+        let _peer_id = self.peer_id.clone().into_inner();
         match serde_json::to_string(&sign_first_message) {
             Ok(json_string) => {
                 //                self.add_commitment(peer_id, json_string.clone());
                 let r = serde_json::to_string(&sign_second_message).expect("couldn't create R");
-                self.commitment_msg = Some(generate_commitment_message_payload((&json_string)));
+                self.commitment_msg = Some(generate_commitment_message_payload(&json_string));
                 self.r_msg = Some(generate_R_message_payload(&r));
             }
-            Err(e) => panic!("Couldn't serialize commitment"),
+            Err(_e) => panic!("Couldn't serialize commitment"),
         }
     }
 
@@ -325,13 +324,13 @@ impl EddsaPeer {
                     .unwrap_or_else(|| panic!("Client has No R "))
                     .clone();
                 let _r: SignSecondMsg =
-                    serde_json::from_str(&r).unwrap_or_else(|e| panic!("failed to deserialize R"));
+                    serde_json::from_str(&r).unwrap_or_else(|_e| panic!("failed to deserialize R"));
                 let key = &self.client_key;
                 // sign
-                let g: GE = ECPoint::generator();
-                let eight: FE = ECScalar::from(&BigInt::from(8));
+                let _g: GE = ECPoint::generator();
+                let _eight: FE = ECScalar::from(&BigInt::from(8));
                 //  println!("rG {:?}", g * &key.expended_private_key.private_key * &eight );
-                let pk = self.pks.get_mut(&peer_id).unwrap();
+                let _pk = self.pks.get_mut(&peer_id).unwrap();
                 let s = Signature::partial_sign(&eph_key.r, key, &k, &agg_key.hash, &r_tot);
                 let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
                 self.sig_msg = Some(generate_signature_message_payload(&sig_string));
@@ -464,7 +463,7 @@ impl Peer for EddsaPeer {
                 println!("sig tot: {:?}", signature);
                 Ok(())
             }
-            Err(e) => Err("Failed to verify"),
+            Err(_e) => Err("Failed to verify"),
         }
     }
     /// check that the protocol is done
@@ -596,7 +595,7 @@ impl<T: Peer> Client<T> {
                     Ok(next_msg) => {
                         new_message = Some(next_msg.clone());
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         println!("Error in handle_server_response");
                     }
                 }
@@ -668,13 +667,13 @@ impl<T: Peer> Client<T> {
     }
 
     fn generate_relay_message(&self, payload: MessagePayload) -> ClientMessage {
-        let msg = ClientMessage::new();
+        let _msg = ClientMessage::new();
         // create relay message
         let mut relay_message = RelayMessage::new(
             self.data_manager.peer_id.clone().into_inner(),
             self.protocol_id.clone(),
         );
-        let mut to: Vec<u32> = self.bc_dests.clone();
+        let to: Vec<u32> = self.bc_dests.clone();
 
         let mut client_message = ClientMessage::new();
 
@@ -754,7 +753,7 @@ impl<T: Peer> Client<T> {
                         println!("sending peers first message: {:#?}", _msg);
                         return Ok(_msg.clone());
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         println!("error occured");
                         return Ok(ClientMessage::new());
                     }
@@ -766,7 +765,7 @@ impl<T: Peer> Client<T> {
                 let msg = self.handle_error_response(err_msg_slice);
                 match msg {
                     Ok(_msg) => return Ok(_msg),
-                    Err(e) => {
+                    Err(_e) => {
                         println!("error occured");
                         return Ok(ClientMessage::new());
                     }
@@ -827,7 +826,7 @@ fn main() {
     let PROTOCOL_IDENTIFIER_ARG = 1;
     let PROTOCOL_CAPACITY_ARG = 2 as ProtocolIdentifier;
 
-    let mut args = env::args().skip(1).collect::<Vec<_>>();
+    let args = env::args().skip(1).collect::<Vec<_>>();
     // Parse what address we're going to connect to
     let addr = args
         .first()
@@ -840,9 +839,9 @@ fn main() {
     let handle = core.handle();
     let _tcp = TcpStream::connect(&addr, &handle);
 
-    let mut count = Arc::new(AtomicUsize::new(0));
+    let count = Arc::new(AtomicUsize::new(0));
 
-    let mut session: Arc<Mutex<Client_W<EddsaPeer>>> =
+    let session: Arc<Mutex<Client_W<EddsaPeer>>> =
         Arc::new(Mutex::new(Client_W(RefCell::new(Client::new(
             PROTOCOL_IDENTIFIER_ARG,
             PROTOCOL_CAPACITY_ARG,
@@ -858,7 +857,7 @@ fn main() {
             // send register message to server
             let send_ = framed_stream.send(msg);
             let session_inner = Arc::clone(&session);
-            let count_inner = Arc::clone(&count);
+            let _count_inner = Arc::clone(&count);
             send_.and_then(|stream| {
                 let (tx, rx) = stream.split();
                 let client = rx

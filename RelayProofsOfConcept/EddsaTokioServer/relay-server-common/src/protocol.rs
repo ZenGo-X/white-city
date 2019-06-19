@@ -56,7 +56,7 @@ pub fn is_valid_protocol(p: &ProtocolDescriptor) -> bool {
     match all_protocols {
         Ok(_protocols) => {
             for prot in _protocols.protocols {
-                println!("Checking if fits protocol: {:?}", prot);
+                debug!("Checking if fits protocol: {:?}", prot);
                 if prot.id == p.id {
                     if prot.capacities.contains(&(p.capacity)) {
                         return true;
@@ -82,7 +82,7 @@ pub fn is_valid_protocol(p: &ProtocolDescriptor) -> bool {
 }
 
 fn get_protocols() -> Result<Protocolss> {
-    println!("Getting protocols");
+    debug!("Getting protocols");
 
     // Open the file in read-only mode with buffer.
     let path = PROTOCOLS_F;
@@ -91,7 +91,7 @@ fn get_protocols() -> Result<Protocolss> {
 
     // Read the JSON contents of the file as an instance of `Protocols`.
     let p = serde_json::from_reader(reader)?;
-    println!("Got protocols: {:?}", p);
+    debug!("Got protocols: {:?}", p);
     Ok(p)
 }
 

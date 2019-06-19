@@ -1,4 +1,3 @@
-#![feature(refcell_replace_swap)]
 extern crate chrono;
 extern crate dict;
 ///
@@ -11,18 +10,16 @@ extern crate relay_server_common;
 extern crate structopt;
 extern crate tokio_core;
 
-use chrono::prelude::*;
-
 use std::cell::RefCell;
 use std::env;
-use std::io::{self, Read, Write};
+
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::vec::Vec;
 use std::{thread, time};
 use structopt::StructOpt;
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -30,7 +27,6 @@ use tokio_core::io::Io;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Core;
 
-use futures::stream;
 use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
 
@@ -44,18 +40,18 @@ extern crate curv;
 extern crate multi_party_ed25519;
 
 use curv::elliptic::curves::ed25519::*;
-use curv::elliptic::curves::traits::ECPoint;
+
 use curv::elliptic::curves::traits::ECScalar;
 use curv::{BigInt, FE, GE};
 
 use multi_party_ed25519::protocols::aggsig::{
-    test_com, verify, EphemeralKey, KeyAgg, KeyPair, SignFirstMsg, SignSecondMsg, Signature,
+    test_com, EphemeralKey, KeyAgg, KeyPair, SignFirstMsg, SignSecondMsg, Signature,
 };
 //use multi_party_ed25519::
 
 use relay_server_common::common::*;
 
-use dict::{Dict, DictIface};
+use dict::DictIface;
 use std::collections::HashMap;
 use std::fs;
 
@@ -129,10 +125,10 @@ impl EddsaPeer {
     }
     fn compute_r_tot(&mut self) -> GE {
         let mut Ri: Vec<GE> = Vec::new();
-        for (peer_id, r) in &self.r_s {
+        for (_peer_id, r) in &self.r_s {
             let r_slice: &str = &r[..];
             let _r: SignSecondMsg =
-                serde_json::from_str(r_slice).unwrap_or_else(|e| panic!("serialization error"));
+                serde_json::from_str(r_slice).unwrap_or_else(|_e| panic!("serialization error"));
             Ri.push(_r.R.clone());
         }
         let r_tot = Signature::get_R_tot(Ri);
@@ -140,11 +136,11 @@ impl EddsaPeer {
     }
     fn aggregate_pks(&mut self) -> KeyAgg {
         println!("aggregating pks");
-        let cap = self.capacity as usize;
+        let _cap = self.capacity as usize;
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for index in 0..self.capacity {
             let peer = index + 1;
-            let mut pk = self.pks.get_mut(&peer).unwrap(); //_or_else(||{println!("dont have peers pk");});
+            let pk = self.pks.get_mut(&peer).unwrap(); //_or_else(||{println!("dont have peers pk");});
             pks.push(pk.clone());
         }
         println!("# of public keys : {:?}", pks.len());
@@ -203,7 +199,7 @@ impl EddsaPeer {
                 println!("-------Got peer # {:} pk! {:?}", from, pk);
                 match _pk {
                     Ok(_pk) => self.add_pk(from, _pk),
-                    Err(e) => panic!("Could not serialize public key"),
+                    Err(_e) => panic!("Could not serialize public key"),
                 }
             }
             _ => panic!("expected public key message"),
@@ -327,7 +323,7 @@ impl Peer for EddsaPeer {
         let res = fs::write(env::args().nth(2).unwrap(), keygen_json);
         match res {
             Ok(_) => Ok(()),
-            Err(e) => Err("Failed to verify"),
+            Err(_e) => Err("Failed to verify"),
         }
     }
     /// check that the protocol is done
@@ -447,7 +443,7 @@ impl<T: Peer> Client<T> {
                     Ok(next_msg) => {
                         new_message = Some(next_msg.clone());
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         println!("Error in handle_server_response");
                     }
                 }
@@ -502,11 +498,6 @@ impl<T: Peer> Client<T> {
 }
 
 impl<T: Peer> Client<T> {
-    fn set_bc_dests(&mut self) {
-        //        let index = self.data_manager.peer_id.clone().into_inner() - 1;
-        //        self.bc_dests.remove(index as usize);
-    }
-
     fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload> {
         // parse relay message
         let relay_msg = msg.relay_message.unwrap();
@@ -519,13 +510,13 @@ impl<T: Peer> Client<T> {
     }
 
     fn generate_relay_message(&self, payload: MessagePayload) -> ClientMessage {
-        let msg = ClientMessage::new();
+        let _msg = ClientMessage::new();
         // create relay message
         let mut relay_message = RelayMessage::new(
             self.data_manager.peer_id.clone().into_inner(),
             self.protocol_id.clone(),
         );
-        let mut to: Vec<u32> = self.bc_dests.clone();
+        let to: Vec<u32> = self.bc_dests.clone();
 
         let mut client_message = ClientMessage::new();
 
@@ -547,7 +538,7 @@ impl<T: Peer> Client<T> {
             .data_manager
             .initialize_data(peer_id)
             .unwrap_or_else(|| panic!("failed to initialize"));
-        self.set_bc_dests();
+        //self.set_bc_dests();
         //      self.wait_timeout();
         // self.last_message.replace(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
@@ -564,8 +555,7 @@ impl<T: Peer> Client<T> {
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) => {
-                        //return Ok(msg.clone());
-                        return Ok(ClientMessage::new());
+                        return Ok(msg.clone());
                     }
                     None => {
                         panic!("No message to resend");
@@ -578,7 +568,7 @@ impl<T: Peer> Client<T> {
                 println!("Not initialized, sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
-                    Some(msg) => {
+                    Some(_msg) => {
                         return Ok(ClientMessage::new());
                         //return Ok(msg.clone());
                     }
@@ -607,7 +597,7 @@ impl<T: Peer> Client<T> {
                         println!("sending peers first message: {:#?}", _msg);
                         return Ok(_msg.clone());
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         println!("error occured");
                         return Ok(ClientMessage::new());
                     }
@@ -619,7 +609,7 @@ impl<T: Peer> Client<T> {
                 let msg = self.handle_error_response(err_msg_slice);
                 match msg {
                     Ok(_msg) => return Ok(_msg),
-                    Err(e) => {
+                    Err(_e) => {
                         println!("error occured");
                         return Ok(ClientMessage::new());
                     }
@@ -670,9 +660,9 @@ fn main() {
     let handle = core.handle();
     let tcp = TcpStream::connect(&addr, &handle);
 
-    let mut count = Arc::new(AtomicUsize::new(0));
+    let count = Arc::new(AtomicUsize::new(0));
 
-    let mut session: Arc<Mutex<Client_W<EddsaPeer>>> =
+    let session: Arc<Mutex<Client_W<EddsaPeer>>> =
         Arc::new(Mutex::new(Client_W(RefCell::new(Client::new(
             PROTOCOL_IDENTIFIER_ARG,
             PROTOCOL_CAPACITY_ARG,
@@ -690,11 +680,10 @@ fn main() {
 
     let client = handshake.and_then(|socket| {
         let mut session_ = session.lock().unwrap();
-        let msg = session_.0.get_mut().generate_register_message();
+        let _msg = session_.0.get_mut().generate_register_message();
 
         // send register message to server
         let session_inner = Arc::clone(&session);
-        let count_inner = Arc::clone(&count);
         let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
         let (tx, rx) = mpsc::channel(0);
         let reader = from_server.for_each(move |msg| {
@@ -702,7 +691,6 @@ fn main() {
             let mut session_i = session_inner.lock().unwrap();
             let session_inner = session_i.0.get_mut();
             let response = session_inner.generate_client_answer(msg).unwrap();
-            //let result = session_inner.generate_client_answer(msg.unwrap());
             println!("Returning {:?}", response);
             tx.clone().send(response.clone()).then(|_| Ok(()))
         });
@@ -711,13 +699,8 @@ fn main() {
         let writer = rx
             .map_err(|()| unreachable!("rx can't fail"))
             .fold(Some(to_server), |to_server, msg| {
-                if msg.is_empty() {
-                    println!("Response is empty");
-                    None
-                } else {
-                    println!("Response is {:?}", msg);
-                    Some(to_server.unwrap().send(msg))
-                }
+                println!("Response is {:?}", msg);
+                Some(to_server.unwrap().send(msg))
             })
             .map(|_| ());
 

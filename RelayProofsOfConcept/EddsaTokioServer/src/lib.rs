@@ -35,7 +35,7 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
 
     let srv = listener.incoming().for_each(move |(socket, addr)| {
         // Got a new connection
-        info!("\nserver got a new connection");
+        info!("Server got a new connection");
 
         // Frame the socket with JSON codec
         let framed_socket = socket.framed(ServerToClientCodec::new());
@@ -67,19 +67,19 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
                     relay_session_inner.register(addr, register.protocol_id, register.capacity)
                 },
                 ClientMessageType::RelayMessage => {
-                    let peer = relay_session_inner.get_peer(&addr).unwrap_or_else(||
+                    let peer = relay_session_inner.get_peer_by_address(&addr).unwrap_or_else(||
                         panic!("not a peer"));
                     info!("Got relay message from {}", peer.peer_id);
                     let relay_msg = msg.relay_message.unwrap().clone();
                     relay_session_inner.relay_message(&addr, relay_msg)
                 },
                 ClientMessageType::Abort => {
-                    let peer = relay_session_inner.get_peer(&addr).unwrap_or_else(|| panic!("not a peer"));
+                    let peer = relay_session_inner.get_peer_by_address(&addr).unwrap_or_else(|| panic!("not a peer"));
                     debug!("\ngot abort message from {}", peer.peer_id);
                     relay_session_inner.abort(addr)
                 },
                 ClientMessageType::Undefined => {
-                    warn!("\nGot unknown or empty message");
+                    warn!("Got unknown or empty message");
                     relay_session_inner.abort(addr)//Box::new(futures::future::ok(())) // TODO this disconnects?
                 }
             }
@@ -108,7 +108,7 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
         handle.spawn(connection.map(|_| ()).map_err(|(err, _)| {error!("\nERROR OCCURED: {:?}",err);err})
             .then(move |_| {
                 // connection is closed
-                error!("\nDisconnected");
+                warn!("Disconnected");
 
                 // this means either a peer disconnected - same as abort,
                 // or an active connection closed - which is allowed

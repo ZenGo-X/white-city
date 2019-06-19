@@ -12,12 +12,11 @@ extern crate chrono;
 extern crate clap;
 extern crate fern;
 extern crate futures;
+extern crate log;
 extern crate relay_server;
 extern crate relay_server_common;
 extern crate tokio_core;
 extern crate tokio_io;
-#[macro_use]
-extern crate log;
 
 use clap::{App, Arg, ArgMatches};
 use relay_server::start_server;

@@ -9,5 +9,5 @@ serde_derive = "0.8"
 serde_json = "0.8"
 tokio-core = "0.1"
 byteorder = "1.0"
-
+log = "0.4"
 futures = "0.1"
