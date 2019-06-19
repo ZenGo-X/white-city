@@ -70,8 +70,8 @@ where
         });
         match msg {
             Ok(msg) => Ok(Some(msg)),
-            Err(e) => {
-                let header_bytes = c_buf.drain_to(2);
+            Err(_e) => {
+                let _header_bytes = c_buf.drain_to(2);
                 let element_size = match c_buf.as_ref().read_u16::<BigEndian>() {
                     Ok(msg_size) => msg_size,
                     Err(_) => return Ok(None),
@@ -79,8 +79,8 @@ where
                 //let element_size = c_buf.clone().as_slice()[3] as usize;
                 let mut smaller_buf = c_buf.drain_to(element_size as usize + 2);
                 //smaller_buf.drain_to(2);
-                /// Afterwards `self` contains elements `[at, len)`, and the returned `EasyBuf`
-                /// contains elements `[0, at)`.
+                // Afterwards `self` contains elements `[at, len)`, and the returned `EasyBuf`
+                // contains elements `[0, at)`
                 //println!("attempting to decode smaller buf:");
                 // println!("-------------\n{:#?}\n-------------",smaller_buf);
                 // Make sure we have at least the 2 u16 bytes we need.

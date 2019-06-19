@@ -27,6 +27,7 @@ use tokio_core::io::Io;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Core;
 
+use futures::stream;
 use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
 
@@ -427,8 +428,25 @@ impl<T: Peer> Client<T> {
             protocol_id,
             last_message: RefCell::new(ClientMessage::new()),
             bc_dests: (1..(capacity + 1)).collect(),
-            timeout: 100, // 3 second delay in sending messages
+            timeout: 0, // 3 second delay in sending messages
             data_manager: data_m,
+        }
+    }
+
+    // Determines the response that should be sent to the server and returns a future
+    // for sending a response, or an ok() future if no action is needed
+    pub fn respond_to_server<E: 'static>(
+        &mut self,
+        msg: ServerMessage,
+        // A sender to pass messages to be written back to the server
+        tx: mpsc::Sender<ClientMessage>,
+    ) -> Box<dyn Future<Item = (), Error = E>> {
+        let response = self.generate_client_answer(msg).unwrap();
+        println!("Returning {:?}", response);
+        if response.is_empty() {
+            Box::new(futures::future::ok(()))
+        } else {
+            Box::new(tx.clone().send(response.clone()).then(|_| Ok(())))
         }
     }
 
@@ -682,7 +700,6 @@ fn main() {
         let mut session_ = session.lock().unwrap();
         let _msg = session_.0.get_mut().generate_register_message();
 
-        // send register message to server
         let session_inner = Arc::clone(&session);
         let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
         let (tx, rx) = mpsc::channel(0);
@@ -690,9 +707,7 @@ fn main() {
             println!("Received {:?}", msg);
             let mut session_i = session_inner.lock().unwrap();
             let session_inner = session_i.0.get_mut();
-            let response = session_inner.generate_client_answer(msg).unwrap();
-            println!("Returning {:?}", response);
-            tx.clone().send(response.clone()).then(|_| Ok(()))
+            session_inner.respond_to_server(msg, tx.clone())
         });
 
         //let writer = rx.for_each(|msg| to_server.send(msg)).map(|_| ());

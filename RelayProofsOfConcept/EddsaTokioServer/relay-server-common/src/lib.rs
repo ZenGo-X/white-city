@@ -1,12 +1,13 @@
-#[macro_use]
-extern crate serde_derive;
-extern crate byteorder;
-#[macro_use]
-extern crate log;
-extern crate serde;
-extern crate serde_json;
-extern crate tokio_core;
+//#[macro_use]
+//extern crate serde_derive;
+//extern crate byteorder;
+//#[macro_use]
+//extern crate log;
+//extern crate serde;
+//extern crate serde_json;
+//extern crate tokio_core;
 
+use serde_derive::{Deserialize, Serialize};
 use std::vec::Vec;
 
 mod codec;

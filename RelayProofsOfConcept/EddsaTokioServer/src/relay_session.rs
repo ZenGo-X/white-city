@@ -1,6 +1,7 @@
 use futures::stream;
 use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
+use log::{debug, info, warn};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -347,7 +348,8 @@ impl RelaySession {
                 // Convert the stream to a future that runs all the sends and box it up.
                 Box::new(send_stream.for_each(|()| Ok(())))
             }
-            _ => Box::new(futures::future::ok(())),
+            _ => self.send_response(addr, server_msg)
+            //_ => Box::new(futures::future::ok(())),
         }
     }
 

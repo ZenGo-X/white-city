@@ -1,7 +1,8 @@
 [package]
 name = "relay-server-common"
 version = "0.1.0"
-authors = ["Avi <kozokinavi@gmail.com>"]
+authors = ["Avi <kozokinavi@gmail.com>", "Alex Manuskin <amanusk@protonmail.com>"]
+edition = "2018"
 
 [dependencies]
 serde = "0.8"

@@ -1,14 +1,6 @@
-extern crate chrono;
-extern crate futures;
-extern crate relay_server_common;
-extern crate structopt;
-extern crate tokio;
-extern crate tokio_core;
-#[macro_use]
-extern crate log;
-
 use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
+use log::{debug, error, info, warn};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
