@@ -67,9 +67,6 @@ pub struct RelaySession {
 }
 
 impl RelaySession {
-    /*
-        RelaySession Private functions
-    */
     pub fn get_number_of_active_peers(&self) -> u32 {
         self.peers
             .read()
@@ -205,10 +202,6 @@ impl RelaySession {
 }
 
 impl RelaySession {
-    /*
-        RelaySession Public functions
-    */
-
     /// Creates a new Relay Session with default (empty) fields
     /// and an Empty state
     pub fn new(capacity: u32) -> RelaySession {
@@ -454,7 +447,6 @@ mod tests {
 
     #[test]
     fn test_add_peer() {
-        //let server_addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
         let protocol_id: ProtocolIdentifier = 1;
         let capacity: u32 = 1;
         let rs = RelaySession::new(capacity);
@@ -471,8 +463,6 @@ mod tests {
 
     #[test]
     fn test_add_multi_peers() {
-        //let server_addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
-
         let protocol_id: ProtocolIdentifier = 1;
         let capacity: u32 = 5;
         let rs = RelaySession::new(capacity);

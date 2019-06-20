@@ -11,7 +11,6 @@ use std::vec::Vec;
 use std::{thread, time};
 use structopt::StructOpt;
 
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -198,8 +197,7 @@ impl Peer for EddsaPeer {
 
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
         self.peer_id.replace(peer_id);
-        let pk/*:Ed25519Point */= self.client_key.public_key.clone();
-        //self.add_pk(peer_id, pk);
+        let pk = self.client_key.public_key.clone();
 
         let pk_s = serde_json::to_string(&pk).expect("Failed in serialization");
 
@@ -324,10 +322,6 @@ impl<T: Peer> ProtocolDataManager<T> {
         self.data_holder.get_next_item()
     }
 }
-
-struct ClientW<T>(RefCell<Client<T>>)
-where
-    T: Peer;
 
 struct Client<T>
 where
@@ -504,8 +498,6 @@ impl<T: Peer> Client<T> {
                 }
             }
             not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
-                // wait
-                //    self.wait_timeout();
                 println!("Not initialized, sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
@@ -597,36 +589,31 @@ fn main() {
     let handle = core.handle();
     let tcp = TcpStream::connect(&addr, &handle);
 
-    let _count = Arc::new(AtomicUsize::new(0));
-
-    let session: Arc<Mutex<ClientW<EddsaPeer>>> =
-        Arc::new(Mutex::new(ClientW(RefCell::new(Client::new(
+    let session: std::sync::Arc<std::sync::Mutex<Client<EddsaPeer>>> =
+        Arc::new(Mutex::new(Client::new(
             protocol_identifier_arg,
             protocol_capacity_arg,
             &MESSAGE_TO_SIGN,
-        )))));
+        )));
 
     let handshake = tcp.and_then(|stream| {
         let handshake_io = stream.framed(ClientToServerCodec::new());
-        let mut session_ = session.lock().unwrap();
-        let msg = session_.0.get_mut().generate_register_message();
+        let mut client = session.lock().unwrap();
+        let msg = client.generate_register_message();
         handshake_io
             .send(msg)
             .map(|handshake_io| handshake_io.into_inner())
     });
 
     let client = handshake.and_then(|socket| {
-        let mut session_ = session.lock().unwrap();
-        let _msg = session_.0.get_mut().generate_register_message();
+        let mut client = session.lock().unwrap();
+        let _msg = client.generate_register_message();
 
-        let session_inner = Arc::clone(&session);
         let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
         let (tx, rx) = mpsc::channel(0);
         let reader = from_server.for_each(move |msg| {
             println!("Received {:?}", msg);
-            let mut session_i = session_inner.lock().unwrap();
-            let session_inner = session_i.0.get_mut();
-            session_inner.respond_to_server(msg, tx.clone())
+            client.respond_to_server(msg, tx.clone())
         });
 
         //let writer = rx.for_each(|msg| to_server.send(msg)).map(|_| ());

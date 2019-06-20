@@ -36,10 +36,6 @@ use relay_server_common::{
     RelayMessage, ServerMessage, ServerMessageType, ServerResponse,
 };
 
-// unique to our eddsa client
-extern crate curv;
-extern crate multi_party_ed25519;
-
 use curv::arithmetic::traits::Converter;
 use curv::elliptic::curves::ed25519::*;
 use curv::elliptic::curves::traits::ECPoint;
@@ -592,10 +588,6 @@ impl<T: Peer> ProtocolDataManager<T> {
     }
 }
 
-struct Client_W<T>(RefCell<Client<T>>)
-where
-    T: Peer;
-
 struct Client<T>
 where
     T: Peer,
@@ -874,36 +866,31 @@ fn main() {
     let handle = core.handle();
     let tcp = TcpStream::connect(&addr, &handle);
 
-    let count = Arc::new(AtomicUsize::new(0));
-
-    let session: Arc<Mutex<Client_W<EddsaPeer>>> =
-        Arc::new(Mutex::new(Client_W(RefCell::new(Client::new(
+    let session: std::sync::Arc<std::sync::Mutex<Client<EddsaPeer>>> =
+        Arc::new(Mutex::new(Client::new(
             PROTOCOL_IDENTIFIER_ARG,
             PROTOCOL_CAPACITY_ARG,
             message_to_sign,
-        )))));
+        )));
 
     let handshake = tcp.and_then(|stream| {
         let handshake_io = stream.framed(ClientToServerCodec::new());
-        let mut session_ = session.lock().unwrap();
-        let msg = session_.0.get_mut().generate_register_message();
+        let mut client = session.lock().unwrap();
+        let msg = client.generate_register_message();
         handshake_io
             .send(msg)
             .map(|handshake_io| handshake_io.into_inner())
     });
 
     let client = handshake.and_then(|socket| {
-        let mut session_ = session.lock().unwrap();
-        let _msg = session_.0.get_mut().generate_register_message();
+        let mut client = session.lock().unwrap();
+        let _msg = client.generate_register_message();
 
-        let session_inner = Arc::clone(&session);
         let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
         let (tx, rx) = mpsc::channel(0);
         let reader = from_server.for_each(move |msg| {
             println!("Received {:?}", msg);
-            let mut session_i = session_inner.lock().unwrap();
-            let session_inner = session_i.0.get_mut();
-            session_inner.respond_to_server(msg, tx.clone())
+            client.respond_to_server(msg, tx.clone())
         });
 
         //let writer = rx.for_each(|msg| to_server.send(msg)).map(|_| ());

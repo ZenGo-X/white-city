@@ -4,7 +4,7 @@ use log::{debug, error, info, warn};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tokio::codec::Framed;
+
 use tokio_core::io::Io;
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
