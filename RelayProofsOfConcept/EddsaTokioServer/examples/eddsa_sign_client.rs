@@ -1,16 +1,5 @@
-extern crate chrono;
-extern crate dict;
-///
 /// Implementation of a client that communicates with the relay server
 /// This client represents eddsa peer
-///
-///
-extern crate futures;
-extern crate hex;
-extern crate relay_server_common;
-extern crate structopt;
-extern crate tokio_core;
-
 use std::cell::RefCell;
 use std::env;
 
@@ -20,7 +9,6 @@ use std::vec::Vec;
 use std::{thread, time};
 use structopt::StructOpt;
 
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -44,11 +32,9 @@ use curv::{BigInt, FE, GE};
 use multi_party_ed25519::protocols::aggsig::{
     test_com, verify, EphemeralKey, KeyAgg, KeyPair, SignFirstMsg, SignSecondMsg, Signature,
 };
-//use multi_party_ed25519::
 
 use relay_server_common::common::*;
 
-use dict::DictIface;
 use std::collections::HashMap;
 use std::fs;
 
@@ -73,6 +59,7 @@ struct Opt {
     message: String,
 }
 
+#[allow(non_snake_case)]
 struct EddsaPeer {
     // this peers identifier in this session
     pub peer_id: RefCell<PeerIdentifier>,
@@ -126,12 +113,13 @@ impl EddsaPeer {
         self.sigs.insert(peer_id, sig);
     }
     fn compute_r_tot(&mut self) -> GE {
+        #[allow(non_snake_case)]
         let mut Ri: Vec<GE> = Vec::new();
         for (_peer_id, r) in &self.r_s {
             let r_slice: &str = &r[..];
-            let _r: SignSecondMsg =
+            let r: SignSecondMsg =
                 serde_json::from_str(r_slice).unwrap_or_else(|_e| panic!("serialization error"));
-            Ri.push(_r.R.clone());
+            Ri.push(r.R.clone());
         }
         let r_tot = Signature::get_R_tot(Ri);
         return r_tot;
@@ -198,7 +186,7 @@ impl EddsaPeer {
         let eight: FE = ECScalar::from(&BigInt::from(8));
         let eight_inv = eight.invert();
         match payload_type {
-            MessagePayloadType::PUBLIC_KEY(pk) => {
+            MessagePayloadType::PublicKey(pk) => {
                 let peer_id = self.peer_id.clone().into_inner();
                 if from == peer_id {
                     self.pk_accepted = true;
@@ -216,7 +204,7 @@ impl EddsaPeer {
     pub fn update_data_step_1(&mut self, from: PeerIdentifier, payload: MessagePayload) {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
-            MessagePayloadType::COMMITMENT(t) => {
+            MessagePayloadType::Commitment(t) => {
                 println!("-------Got peer # {:} commitment! {:?}", from, t);
                 let peer_id = self.peer_id.clone().into_inner();
                 if from == peer_id {
@@ -231,7 +219,7 @@ impl EddsaPeer {
     pub fn update_data_step_2(&mut self, from: PeerIdentifier, payload: MessagePayload) {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
-            MessagePayloadType::R_MESSAGE(r) => {
+            MessagePayloadType::RMessage(r) => {
                 println!("-------Got peer # {:} R message!", from);
                 let peer_id = self.peer_id.clone().into_inner();
                 if from == peer_id {
@@ -247,7 +235,7 @@ impl EddsaPeer {
         println!("updating data step 3");
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
-            MessagePayloadType::SIGNATURE(s) => {
+            MessagePayloadType::Signature(s) => {
                 println!("-------Got peer # {:} Signature", from);
                 let peer_id = self.peer_id.clone().into_inner();
                 if from == peer_id {
@@ -283,14 +271,10 @@ impl EddsaPeer {
         println!("Checking if last step is done");
 
         if self.sigs.len() == self.capacity as usize {
-            self.finalize();
+            self.finalize().unwrap();
             return true;
         }
         false
-    }
-    /// Check if peer should finalize the session
-    pub fn should_finalize(&mut self) -> bool {
-        self.is_done()
     }
 }
 impl EddsaPeer {
@@ -321,8 +305,8 @@ impl EddsaPeer {
         }
     }
 
+    /// step 2 - return the clients R. No extra calculations
     pub fn step_2(&mut self) {
-        /// step 2 - return the clients R. No extra calculations
         println!("Step 2 - no calculations required. Relevant values should be ready");
     }
     /// step 3 - after validating all commitments:
@@ -360,7 +344,7 @@ impl EddsaPeer {
                 let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
                 self.sig_msg = Some(generate_signature_message_payload(&sig_string));
             }
-            None => {} //return String::from(relay_server_common::common::EMPTY_MESSAGE_PAYLOAD.clone())
+            None => {}
         }
     }
 }
@@ -374,16 +358,16 @@ impl EddsaPeer {
         let msg_payload = String::from(split_msg[1].clone());
         match msg_prefix {
             pk_prefix if pk_prefix == String::from(PK_MESSAGE_PREFIX) => {
-                return MessagePayloadType::PUBLIC_KEY(msg_payload);
+                return MessagePayloadType::PublicKey(msg_payload);
             }
             cmtmnt if cmtmnt == String::from(COMMITMENT_MESSAGE_PREFIX) => {
-                return MessagePayloadType::COMMITMENT(msg_payload);
+                return MessagePayloadType::Commitment(msg_payload);
             }
             r if r == String::from(R_KEY_MESSAGE_PREFIX) => {
-                return MessagePayloadType::R_MESSAGE(msg_payload);
+                return MessagePayloadType::RMessage(msg_payload);
             }
             sig if sig == String::from(SIGNATURE_MESSAGE_PREFIX) => {
-                return MessagePayloadType::SIGNATURE(msg_payload);
+                return MessagePayloadType::Signature(msg_payload);
             }
             _ => panic!("Unknown relay message prefix"),
         }
@@ -468,6 +452,7 @@ impl Peer for EddsaPeer {
     /// in this case:
     ///     collection all signatures
     ///     and verifying the message
+    #[allow(non_snake_case)]
     fn finalize(&mut self) -> Result<(), &'static str> {
         let mut s: Vec<Signature> = Vec::new();
         let eight: FE = ECScalar::from(&BigInt::from(8));
@@ -599,6 +584,7 @@ where
     pub bc_dests: Vec<ProtocolIdentifier>,
     pub timeout: u32,
 }
+
 impl<T: Peer> Client<T> {
     pub fn new(protocol_id: ProtocolIdentifier, capacity: u32, message: Vec<u8>) -> Client<T>
     where
@@ -696,11 +682,6 @@ impl<T: Peer> Client<T> {
 }
 
 impl<T: Peer> Client<T> {
-    fn set_bc_dests(&mut self) {
-        //        let index = self.data_manager.peer_id.clone().into_inner() - 1;
-        //        self.bc_dests.remove(index as usize);
-    }
-
     fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload> {
         // parse relay message
         let relay_msg = msg.relay_message.unwrap();
@@ -741,9 +722,6 @@ impl<T: Peer> Client<T> {
             .data_manager
             .initialize_data(peer_id)
             .unwrap_or_else(|| panic!("failed to initialize"));
-        self.set_bc_dests();
-        //      self.wait_timeout();
-        // self.last_message.replace(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
     }
 
@@ -766,9 +744,6 @@ impl<T: Peer> Client<T> {
                 }
             }
             not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
-                // wait
-                //    self.wait_timeout();
-                //              println!("sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) => {
@@ -817,11 +792,7 @@ impl<T: Peer> Client<T> {
                     }
                 }
             }
-            // ServerResponse::GeneralResponse(msg) => {
-            //     unimplemented!()
-            //   },
             ServerResponse::NoResponse => unimplemented!(),
-            _ => panic!("failed to handle response"),
         }
     }
 }
@@ -835,14 +806,14 @@ pub enum MessageProcessResult {
 #[derive(Debug)]
 enum MessagePayloadType {
     /// Types of expected relay messages
-    /// for step 0 we expect PUBLIC_KEY_MESSAGE
-    /// for step 1 we expect COMMITMENT
-    /// for step 2 we expect R_MESSAGE
-    /// for step 3 we expect SIGNATURE
-    PUBLIC_KEY(String),
-    COMMITMENT(String),
-    R_MESSAGE(String),
-    SIGNATURE(String),
+    /// for step 0 we expect PublicKeyMessate
+    /// for step 1 we expect Commitment
+    /// for step 2 we expect RMessage
+    /// for step 3 we expect Signature
+    PublicKey(String),
+    Commitment(String),
+    RMessage(String),
+    Signature(String),
 }
 
 fn main() {
@@ -850,8 +821,8 @@ fn main() {
 
     let addr = opt.address;
 
-    let PROTOCOL_IDENTIFIER_ARG = 1;
-    let PROTOCOL_CAPACITY_ARG = opt.capacity;
+    let protocol_identifier_arg = 1;
+    let protocol_capapcity_arg = opt.capacity;
 
     let addr = addr.parse::<SocketAddr>().unwrap();
 
@@ -868,8 +839,8 @@ fn main() {
 
     let session: std::sync::Arc<std::sync::Mutex<Client<EddsaPeer>>> =
         Arc::new(Mutex::new(Client::new(
-            PROTOCOL_IDENTIFIER_ARG,
-            PROTOCOL_CAPACITY_ARG,
+            protocol_identifier_arg,
+            protocol_capapcity_arg,
             message_to_sign,
         )));
 
@@ -893,7 +864,6 @@ fn main() {
             client.respond_to_server(msg, tx.clone())
         });
 
-        //let writer = rx.for_each(|msg| to_server.send(msg)).map(|_| ());
         let writer = rx
             .map_err(|()| unreachable!("rx can't fail"))
             .fold(to_server, |to_server, msg| to_server.send(msg))

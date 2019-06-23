@@ -9,8 +9,8 @@ use std::mem;
 
 pub struct LengthPrefixedJson<In, Out>
 where
-    In: Serialize + Deserialize,  //<'a>,
-    Out: Serialize + Deserialize, //<'a>
+    In: Serialize + Deserialize,
+    Out: Serialize + Deserialize,
 {
     _in: PhantomData<In>,
     _out: PhantomData<Out>,
@@ -18,8 +18,8 @@ where
 
 impl<In, Out> LengthPrefixedJson<In, Out>
 where
-    In: Serialize + Deserialize,  //<'a>,
-    Out: Serialize + Deserialize, //<'a>
+    In: Serialize + Deserialize,
+    Out: Serialize + Deserialize,
 {
     pub fn new() -> LengthPrefixedJson<In, Out> {
         LengthPrefixedJson {
@@ -48,7 +48,6 @@ where
             Ok(msg_size) => msg_size,
             Err(_) => return Ok(None),
         };
-        //        println!("Message size is {:?}", msg_size);
         let hdr_size = mem::size_of_val(&msg_size);
         let msg_size = msg_size as usize + hdr_size;
 
@@ -70,21 +69,13 @@ where
         });
         match msg {
             Ok(msg) => Ok(Some(msg)),
-            Err(_e) => {
+            Err(_) => {
                 let _header_bytes = c_buf.drain_to(2);
                 let element_size = match c_buf.as_ref().read_u16::<BigEndian>() {
                     Ok(msg_size) => msg_size,
                     Err(_) => return Ok(None),
                 };
-                //let element_size = c_buf.clone().as_slice()[3] as usize;
                 let mut smaller_buf = c_buf.drain_to(element_size as usize + 2);
-                //smaller_buf.drain_to(2);
-                // Afterwards `self` contains elements `[at, len)`, and the returned `EasyBuf`
-                // contains elements `[0, at)`
-                //println!("attempting to decode smaller buf:");
-                // println!("-------------\n{:#?}\n-------------",smaller_buf);
-                // Make sure we have at least the 2 u16 bytes we need.
-                //println!("DECODING SMALLER {:?}",smaller_buf);
                 let msg_size = match smaller_buf.as_ref().read_u16::<BigEndian>() {
                     Ok(msg_size) => msg_size,
                     Err(_) => return Ok(None),
@@ -115,7 +106,6 @@ where
 
     fn encode(&mut self, msg: Out, buf: &mut Vec<u8>) -> io::Result<()> {
         // Encode directly into `buf`.
-        //	println!("ENCODING {:?}", buf);
         serde_json::to_writer(buf, &msg).map_err(|err| {
             println!("ENCODING ERROR");
             io::Error::new(io::ErrorKind::InvalidData, err)

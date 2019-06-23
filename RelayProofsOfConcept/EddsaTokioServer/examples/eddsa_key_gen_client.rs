@@ -11,8 +11,7 @@ use std::vec::Vec;
 use std::{thread, time};
 use structopt::StructOpt;
 
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tokio_core::io::Io;
 use tokio_core::net::TcpStream;
@@ -55,6 +54,7 @@ struct Opt {
     output: PathBuf,
 }
 
+#[allow(non_snake_case)]
 struct EddsaPeer {
     // this peers identifier in this session
     pub peer_id: RefCell<PeerIdentifier>,
@@ -72,11 +72,9 @@ struct EddsaPeer {
     pub r_s: HashMap<PeerIdentifier, String>,
     pub sigs: HashMap<PeerIdentifier, String>,
     pub ephemeral_key: Option<EphemeralKey>,
-    // message to sign
-    pub message: &'static [u8],
 
     pub agg_key: Option<KeyAgg>,
-    pub r_tot: Option<GE>,
+    pub R_tot: Option<GE>,
 
     // indicators for which of this peers messages were accepted
     pub pk_accepted: bool,
@@ -102,7 +100,7 @@ impl EddsaPeer {
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for index in 0..self.capacity {
             let peer = index + 1;
-            let pk = self.pks.get_mut(&peer).unwrap(); //_or_else(||{println!("dont have peers pk");});
+            let pk = self.pks.get_mut(&peer).unwrap();
             pks.push(pk.clone());
         }
         println!("# of public keys : {:?}", pks.len());
@@ -128,7 +126,7 @@ impl EddsaPeer {
                 println!("-------Got peer # {:} pk! {:?}", from, pk);
                 match _pk {
                     Ok(_pk) => self.add_pk(from, _pk),
-                    Err(_e) => panic!("Could not serialize public key"),
+                    Err(_) => panic!("Could not serialize public key"),
                 }
             }
         }
@@ -168,7 +166,7 @@ impl EddsaPeer {
 }
 
 impl Peer for EddsaPeer {
-    fn new(capacity: u32, _message: &'static [u8]) -> EddsaPeer {
+    fn new(capacity: u32) -> EddsaPeer {
         EddsaPeer {
             client_key: KeyPair::create(),
             pks: HashMap::new(),
@@ -176,11 +174,10 @@ impl Peer for EddsaPeer {
             r_s: HashMap::new(),
             sigs: HashMap::new(),
             capacity,
-            message: _message,
             peer_id: RefCell::new(0),
             agg_key: None,
             current_step: 0,
-            r_tot: None,
+            R_tot: None,
             ephemeral_key: None,
             pk_accepted: false,
             commitment_accepted: false,
@@ -245,7 +242,7 @@ impl Peer for EddsaPeer {
         let res = fs::write(env::args().nth(2).unwrap(), keygen_json);
         match res {
             Ok(_) => Ok(()),
-            Err(_e) => Err("Failed to verify"),
+            Err(_) => Err("Failed to verify"),
         }
     }
     /// check that the protocol is done
@@ -267,7 +264,7 @@ impl Peer for EddsaPeer {
     }
 }
 pub trait Peer {
-    fn new(capacity: u32, _message: &'static [u8]) -> Self;
+    fn new(capacity: u32) -> Self;
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload>;
     fn do_step(&mut self);
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload);
@@ -286,7 +283,7 @@ struct ProtocolDataManager<T: Peer> {
 }
 
 impl<T: Peer> ProtocolDataManager<T> {
-    pub fn new(capacity: u32, message: &'static [u8]) -> ProtocolDataManager<T>
+    pub fn new(capacity: u32) -> ProtocolDataManager<T>
     where
         T: Peer,
     {
@@ -294,10 +291,9 @@ impl<T: Peer> ProtocolDataManager<T> {
             peer_id: RefCell::new(0),
             current_step: 0,
             capacity,
-            data_holder: Peer::new(capacity, message),
+            data_holder: Peer::new(capacity),
             client_data: None,
             new_client_data: false,
-            //message: message.clone(),
         }
     }
 
@@ -332,20 +328,19 @@ where
     pub data_manager: ProtocolDataManager<T>,
     pub last_message: RefCell<ClientMessage>,
     pub bc_dests: Vec<ProtocolIdentifier>,
-    pub timeout: u32,
 }
+
 impl<T: Peer> Client<T> {
-    pub fn new(protocol_id: ProtocolIdentifier, capacity: u32, message: &'static [u8]) -> Client<T>
+    pub fn new(protocol_id: ProtocolIdentifier, capacity: u32) -> Client<T>
     where
         T: Peer,
     {
-        let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity, message);
+        let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity);
         Client {
             registered: false,
             protocol_id,
             last_message: RefCell::new(ClientMessage::new()),
             bc_dests: (1..(capacity + 1)).collect(),
-            timeout: 0, // 3 second delay in sending messages
             data_manager: data_m,
         }
     }
@@ -378,7 +373,7 @@ impl<T: Peer> Client<T> {
                     Ok(next_msg) => {
                         new_message = Some(next_msg.clone());
                     }
-                    Err(_e) => {
+                    Err(_) => {
                         println!("Error in handle_server_response");
                     }
                 }
@@ -420,7 +415,6 @@ impl<T: Peer> Client<T> {
                 println!("last message changed");
                 self.last_message.replace(_new_message.clone());
             }
-            self.wait_timeout();
             return Some(self.last_message.clone().into_inner());
         }
     }
@@ -460,12 +454,6 @@ impl<T: Peer> Client<T> {
         client_message
     }
 
-    fn wait_timeout(&self) {
-        //    println!("Waiting timeout..");
-        let wait_time = time::Duration::from_millis(self.timeout as u64);
-        thread::sleep(wait_time);
-    }
-
     fn handle_register_response(&mut self, peer_id: PeerIdentifier) -> Result<ClientMessage, ()> {
         println!("Peer identifier: {}", peer_id);
         // Set the session parameters
@@ -473,9 +461,6 @@ impl<T: Peer> Client<T> {
             .data_manager
             .initialize_data(peer_id)
             .unwrap_or_else(|| panic!("failed to initialize"));
-        //self.set_bc_dests();
-        //      self.wait_timeout();
-        // self.last_message.replace(self.generate_relay_message(message.clone()));
         Ok(self.generate_relay_message(message.clone()))
     }
 
@@ -501,9 +486,9 @@ impl<T: Peer> Client<T> {
                 println!("Not initialized, sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
-                    Some(_msg) => {
+                    Some(_) => {
+                        // If protocol is not initialized, wait for a message from the server
                         return Ok(ClientMessage::new());
-                        //return Ok(msg.clone());
                     }
                     None => {
                         panic!("No message to resend");
@@ -530,7 +515,7 @@ impl<T: Peer> Client<T> {
                         println!("sending peers first message: {:#?}", _msg);
                         return Ok(_msg.clone());
                     }
-                    Err(_e) => {
+                    Err(_) => {
                         println!("error occured");
                         return Ok(ClientMessage::new());
                     }
@@ -542,7 +527,7 @@ impl<T: Peer> Client<T> {
                 let msg = self.handle_error_response(err_msg_slice);
                 match msg {
                     Ok(_msg) => return Ok(_msg),
-                    Err(_e) => {
+                    Err(_) => {
                         println!("error occured");
                         return Ok(ClientMessage::new());
                     }
@@ -572,8 +557,6 @@ enum MessagePayloadType {
     // Signature(String),
 }
 
-static MESSAGE_TO_SIGN: [u8; 4] = [79, 77, 69, 82];
-
 fn main() {
     let opt = Opt::from_args();
 
@@ -589,12 +572,9 @@ fn main() {
     let handle = core.handle();
     let tcp = TcpStream::connect(&addr, &handle);
 
-    let session: std::sync::Arc<std::sync::Mutex<Client<EddsaPeer>>> =
-        Arc::new(Mutex::new(Client::new(
-            protocol_identifier_arg,
-            protocol_capacity_arg,
-            &MESSAGE_TO_SIGN,
-        )));
+    let session: std::sync::Arc<std::sync::Mutex<Client<EddsaPeer>>> = Arc::new(Mutex::new(
+        Client::new(protocol_identifier_arg, protocol_capacity_arg),
+    ));
 
     let handshake = tcp.and_then(|stream| {
         let handshake_io = stream.framed(ClientToServerCodec::new());
@@ -616,7 +596,6 @@ fn main() {
             client.respond_to_server(msg, tx.clone())
         });
 
-        //let writer = rx.for_each(|msg| to_server.send(msg)).map(|_| ());
         let writer = rx
             .map_err(|()| unreachable!("rx can't fail"))
             .fold(to_server, |to_server, msg| to_server.send(msg))

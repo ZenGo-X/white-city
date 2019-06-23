@@ -1,12 +1,3 @@
-//#[macro_use]
-//extern crate serde_derive;
-//extern crate byteorder;
-//#[macro_use]
-//extern crate log;
-//extern crate serde;
-//extern crate serde_json;
-//extern crate tokio_core;
-
 use serde_derive::{Deserialize, Serialize};
 use std::vec::Vec;
 
@@ -17,11 +8,10 @@ pub mod protocol;
 pub type ProtocolIdentifier = u32;
 pub type PeerIdentifier = u32;
 pub type MessagePayload = String;
-//pub type MessagePayload = serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelayMessage {
-    pub peer_number: PeerIdentifier, // from
+    pub peer_number: PeerIdentifier,
     pub protocol_id: ProtocolIdentifier,
     //pub round: u32,
     pub to: Vec<PeerIdentifier>,
@@ -33,18 +23,12 @@ impl RelayMessage {
         RelayMessage {
             peer_number,
             protocol_id,
-            //    round: 0,
             to: Vec::new(),
             message: String::from(""),
         }
     }
 
-    pub fn set_message_params<S: Into<String>>(
-        &mut self,
-        //  round_number: u32,
-        to: Vec<PeerIdentifier>,
-        message: S,
-    ) {
+    pub fn set_message_params<S: Into<String>>(&mut self, to: Vec<PeerIdentifier>, message: S) {
         //self.round = round_number;
         self.to = to;
         self.message = message.into();
@@ -58,9 +42,6 @@ pub enum ServerResponse {
 
     // Error message
     ErrorResponse(String),
-
-    // General Response
-    //    GeneralResponse(String),
 
     // No response
     NoResponse,
@@ -210,7 +191,3 @@ struct RegisterResponse {
 // in: clientMessage out:serverMessage
 pub type ServerToClientCodec = codec::LengthPrefixedJson<ClientMessage, ServerMessage>;
 pub type ClientToServerCodec = codec::LengthPrefixedJson<ServerMessage, ClientMessage>;
-
-// codec for register message
-//pub type ServerToClientRegister = codec::LengthPrefixedJson<RegisterMessage, RegisterResponse>;
-//pub type ClientToServerRegister = codec::LengthPrefixedJson<RegisterResponse, RegisterMessage>;

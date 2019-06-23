@@ -3,7 +3,6 @@ use futures::{Future, Sink, Stream};
 use log::{debug, error, info, warn};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use tokio_core::io::Io;
 use tokio_core::net::TcpListener;
@@ -24,7 +23,7 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
     info!("Listening on: {}", addr);
 
     // Create the session fot the relay server
-    let relay_session = Arc::new(Mutex::new(relay_session::RelaySession::new(capacity)));
+    let relay_session = Arc::new(relay_session::RelaySession::new(capacity));
 
     let srv = listener.incoming().for_each(move |(socket, addr)| {
         // Got a new connection
@@ -40,7 +39,7 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
         let (tx, rx) = mpsc::channel(0);//(8);
 
         // insert this client to the servers active_connections
-        relay_session_inner.lock().unwrap().insert_new_connection(addr.clone(),relay_session::Client::new(tx));
+        relay_session_inner.insert_new_connection(addr.clone(),relay_session::Client::new(tx));
 
         // split the socket to reading part (stream) and writing part (sink)
         let (to_client, from_client) = framed_socket.split();
@@ -48,7 +47,6 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
         // define future for receiving half
         let relay_session_inner = Arc::clone(&relay_session);
         let reader = from_client.for_each(move |msg| {
-            let relay_session_inner= relay_session_inner.lock().unwrap();
 
             let msg_type = msg.msg_type();
 
@@ -105,7 +103,6 @@ pub fn start_server(addr: &SocketAddr, capacity: u32) {
 
                 // this means either a peer disconnected - same as abort,
                 // or an active connection closed - which is allowed
-                let mut relay_session_inner = relay_session_inner.lock().unwrap();
                 relay_session_inner.connection_closed(addr)
             }));
 

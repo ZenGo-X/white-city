@@ -1,26 +1,20 @@
+/// Structures for supported protocols for relay-server
 use log::debug;
-///
-/// structures for supported protocols for relay-server
-///
+use serde_derive::Deserialize;
 use serde_json::Result;
-use std::cell::RefCell;
 use std::fs::File;
 use std::io::BufReader;
-
-use serde_derive::Deserialize;
+use std::sync::{Arc, RwLock};
 
 use crate::ProtocolIdentifier;
 
 static PROTOCOLS_F: &str = r#"./protocols.json"#;
 
-//#[derive(Deserialize, Debug)]
-//pub struct Protocols(serde_json::Map<String,Value>);
-
 #[derive(Debug, Clone)]
 pub struct ProtocolDescriptor {
     pub id: ProtocolIdentifier,
     pub capacity: u32,
-    pub turn: RefCell<u32>,
+    pub turn: Arc<RwLock<u32>>,
 }
 
 impl ProtocolDescriptor {
@@ -28,28 +22,31 @@ impl ProtocolDescriptor {
         ProtocolDescriptor {
             id,
             capacity,
-            turn: RefCell::new(1),
+            turn: Arc::new(RwLock::new(1)),
         }
     }
 
+    // Advances the peer whose turn it is to transmit.
+    // If the peer is 0, initializes state to 1, else, advances turn by 1
     pub fn advance_turn(&self) -> u32 {
-        let turn = self.turn.clone().into_inner();
-        let peer_number = (turn + 1) % (self.capacity + 1);
+        let mut turn = self.turn.write().unwrap();
+        let peer_number = (*turn + 1) % (self.capacity + 1);
         if peer_number == 0 {
-            self.turn.replace(1);
+            *turn = 1;
         } else {
-            self.turn.replace(peer_number);
+            *turn = peer_number;
         }
-        return self.turn.clone().into_inner();
+        *turn
     }
 
-    // get the # of next peer that can send a message
+    // Get the # of next peer that can send a message
     pub fn next(&self) -> u32 {
-        let turn = self.turn.clone().into_inner();
-        turn
+        *self.turn.read().unwrap()
     }
 }
 
+/// Returns true if the protocol is a valid protocol as determined by the
+/// protocols.json file
 pub fn is_valid_protocol(p: &ProtocolDescriptor) -> bool {
     let all_protocols = get_protocols();
     match all_protocols {
@@ -65,21 +62,12 @@ pub fn is_valid_protocol(p: &ProtocolDescriptor) -> bool {
                 }
             }
             return false;
-            //            match protocols.get(&p.id) {
-            //                Ok(prot) =>{
-            //                    let capacities = prot["capacities"];
-            //                    match  capacities.iter().find(|&&x| x == p.capacity){
-            //                        Ok(c) => return true,
-            //                        None => return false
-            //                    }
-            //                },
-            //                None => return false
-            //            }
         }
-        Err(_e) => panic!("corrupt protocols file"),
+        Err(_) => panic!("Corrupt protocols file"),
     }
 }
 
+// Reutrn all avaliable protocols
 fn get_protocols() -> Result<Protocolss> {
     debug!("Getting protocols");
 
