@@ -1,23 +1,25 @@
-use serde::{Serialize, Deserialize};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio_core::io::{Codec, EasyBuf};
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use std::io;
 use std::marker::PhantomData;
 use std::mem;
 
 pub struct LengthPrefixedJson<In, Out>
-    where In: Serialize + Deserialize,//<'a>,
-          Out: Serialize + Deserialize//<'a>
+where
+    In: Serialize + Deserialize,
+    Out: Serialize + Deserialize,
 {
     _in: PhantomData<In>,
     _out: PhantomData<Out>,
 }
 
 impl<In, Out> LengthPrefixedJson<In, Out>
-    where In: Serialize + Deserialize,//<'a>,
-          Out: Serialize + Deserialize//<'a>
+where
+    In: Serialize + Deserialize,
+    Out: Serialize + Deserialize,
 {
     pub fn new() -> LengthPrefixedJson<In, Out> {
         LengthPrefixedJson {
@@ -25,15 +27,15 @@ impl<In, Out> LengthPrefixedJson<In, Out>
             _out: PhantomData,
         }
     }
-
 }
 
 // `LengthPrefixedJson` is a codec for sending and receiving serde_json serializable types. The
 // over the wire format is a Big Endian u16 indicating the number of bytes in the JSON payload
 // (not including the 2 u16 bytes themselves) followed by the JSON payload.
-impl<In, Out> Codec for LengthPrefixedJson< In, Out>
-    where In: Serialize + Deserialize,//<'a>,
-          Out: Serialize + Deserialize//<'a>
+impl<In, Out> Codec for LengthPrefixedJson<In, Out>
+where
+    In: Serialize + Deserialize,  //<'a>,
+    Out: Serialize + Deserialize, //<'a>
 {
     type In = In;
     type Out = Out;
@@ -46,7 +48,6 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
             Ok(msg_size) => msg_size,
             Err(_) => return Ok(None),
         };
-//        println!("Message size is {:?}", msg_size);
         let hdr_size = mem::size_of_val(&msg_size);
         let msg_size = msg_size as usize + hdr_size;
 
@@ -62,25 +63,19 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
         let msg_buf = &buf.as_ref()[hdr_size..];
 
         // Decode!
-        let msg = serde_json::from_slice(msg_buf)
-            .map_err(|err| {println!("decode error: {:?}",err);io::Error::new(io::ErrorKind::InvalidData, err)});
+        let msg = serde_json::from_slice(msg_buf).map_err(|err| {
+            println!("decode error: {:?}", err);
+            io::Error::new(io::ErrorKind::InvalidData, err)
+        });
         match msg {
-            Ok(msg) => { Ok(Some(msg))},
-            Err(e) => {
-                let header_bytes = c_buf.drain_to(2);
+            Ok(msg) => Ok(Some(msg)),
+            Err(_) => {
+                let _header_bytes = c_buf.drain_to(2);
                 let element_size = match c_buf.as_ref().read_u16::<BigEndian>() {
                     Ok(msg_size) => msg_size,
                     Err(_) => return Ok(None),
                 };
-                //let element_size = c_buf.clone().as_slice()[3] as usize;
-                let mut smaller_buf = c_buf.drain_to( element_size as usize + 2);
-                //smaller_buf.drain_to(2);
-                /// Afterwards `self` contains elements `[at, len)`, and the returned `EasyBuf`
-                /// contains elements `[0, at)`.
-                //println!("attempting to decode smaller buf:");
-               // println!("-------------\n{:#?}\n-------------",smaller_buf);
-                // Make sure we have at least the 2 u16 bytes we need.
-                //println!("DECODING SMALLER {:?}",smaller_buf);
+                let mut smaller_buf = c_buf.drain_to(element_size as usize + 2);
                 let msg_size = match smaller_buf.as_ref().read_u16::<BigEndian>() {
                     Ok(msg_size) => msg_size,
                     Err(_) => return Ok(None),
@@ -100,8 +95,10 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
                 let msg_buf = &buf.as_ref()[hdr_size..];
 
                 // Decode!
-                let msg: In = serde_json::from_slice(msg_buf)
-                    .map_err(|err| {println!("inner decode error: {:?}",err);io::Error::new(io::ErrorKind::InvalidData, err)})?;
+                let msg: In = serde_json::from_slice(msg_buf).map_err(|err| {
+                    println!("inner decode error: {:?}", err);
+                    io::Error::new(io::ErrorKind::InvalidData, err)
+                })?;
                 Ok(Some(msg))
             }
         }
@@ -109,9 +106,10 @@ impl<In, Out> Codec for LengthPrefixedJson< In, Out>
 
     fn encode(&mut self, msg: Out, buf: &mut Vec<u8>) -> io::Result<()> {
         // Encode directly into `buf`.
-//	println!("ENCODING {:?}", buf);
-        serde_json::to_writer(buf, &msg)
-            .map_err(|err| {println!("ENCODING ERROR");io::Error::new(io::ErrorKind::InvalidData, err)})?;
+        serde_json::to_writer(buf, &msg).map_err(|err| {
+            println!("ENCODING ERROR");
+            io::Error::new(io::ErrorKind::InvalidData, err)
+        })?;
 
         let len = buf.len() as u16;
 
