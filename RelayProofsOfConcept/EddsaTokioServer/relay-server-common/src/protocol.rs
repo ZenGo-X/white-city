@@ -1,7 +1,7 @@
 /// Structures for supported protocols for relay-server
 use log::debug;
-use serde_derive::Deserialize;
-use serde_json::Result;
+use serde::{Deserialize, Serialize};
+use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::{Arc, RwLock};
@@ -67,8 +67,20 @@ pub fn is_valid_protocol(p: &ProtocolDescriptor) -> bool {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct Protocolss {
+    pub protocols: Vec<Protocol>,
+}
+
+#[derive(Deserialize, Debug, Serialize)]
+struct Protocol {
+    pub id: u32,
+    pub capacities: Vec<u32>,
+    pub names: Vec<String>,
+}
+
 // Reutrn all avaliable protocols
-fn get_protocols() -> Result<Protocolss> {
+fn get_protocols() -> Result<Protocolss, Box<dyn Error>> {
     debug!("Getting protocols");
 
     // Open the file in read-only mode with buffer.
@@ -78,18 +90,7 @@ fn get_protocols() -> Result<Protocolss> {
 
     // Read the JSON contents of the file as an instance of `Protocols`.
     let p = serde_json::from_reader(reader)?;
-    debug!("Got protocols: {:?}", p);
+
+    //debug!("Got protocols: {:?}", p);
     Ok(p)
-}
-
-#[derive(Deserialize, Debug)]
-struct Protocolss {
-    pub protocols: Vec<Protocol>,
-}
-
-#[derive(Deserialize, Debug)]
-struct Protocol {
-    pub id: u32,
-    pub capacities: Vec<u32>,
-    pub names: Vec<String>,
 }

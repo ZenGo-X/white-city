@@ -1,8 +1,8 @@
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::vec::Vec;
 
-mod codec;
 pub mod common;
+pub mod json_codec;
 pub mod protocol;
 
 pub type ProtocolIdentifier = u32;
@@ -189,5 +189,5 @@ struct RegisterResponse {
 }
 
 // in: clientMessage out:serverMessage
-pub type ServerToClientCodec = codec::LengthPrefixedJson<ClientMessage, ServerMessage>;
-pub type ClientToServerCodec = codec::LengthPrefixedJson<ServerMessage, ClientMessage>;
+pub type ServerToClientCodec = tokio_jsoncodec::Codec<ClientMessage, ServerMessage>;
+pub type ClientToServerCodec = tokio_jsoncodec::Codec<ServerMessage, ClientMessage>;

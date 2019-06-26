@@ -1,23 +1,25 @@
 /// Implementation of a client that communicates with the relay server
 /// This client represents eddsa peer
+///
+///
 use std::cell::RefCell;
 use std::env;
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::vec::Vec;
 use std::{thread, time};
-use structopt::StructOpt;
 
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use tokio_core::io::Io;
+use tokio::codec::Framed;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Core;
 
 use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
+
+use structopt::StructOpt;
 
 use relay_server_common::{
     ClientMessage, ClientToServerCodec, MessagePayload, PeerIdentifier, ProtocolIdentifier,
@@ -118,7 +120,7 @@ impl EddsaPeer {
         for (_peer_id, r) in &self.r_s {
             let r_slice: &str = &r[..];
             let r: SignSecondMsg =
-                serde_json::from_str(r_slice).unwrap_or_else(|_e| panic!("serialization error"));
+                serde_json::from_str(r_slice).unwrap_or_else(|_| panic!("Serialization error"));
             Ri.push(r.R.clone());
         }
         let r_tot = Signature::get_R_tot(Ri);
@@ -130,7 +132,7 @@ impl EddsaPeer {
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for index in 0..self.capacity {
             let peer = index + 1;
-            let pk = self.pks.get_mut(&peer).unwrap(); //_or_else(||{println!("dont have peers pk");});
+            let pk = self.pks.get_mut(&peer).unwrap();
             pks.push(pk.clone());
         }
         println!("# of public keys : {:?}", pks.len());
@@ -192,10 +194,10 @@ impl EddsaPeer {
                     self.pk_accepted = true;
                 }
                 let s_slice: &str = &pk[..]; // take a full slice of the string
-                let _pk: GE = serde_json::from_str(&s_slice)
-                    .unwrap_or_else(|_e| panic!("failed to deserialize R"));
-                println!("-------Got peer # {:} pk! {:?}", from, _pk * &eight_inv);
-                self.add_pk(from, _pk * &eight_inv);
+                let pk: GE = serde_json::from_str(&s_slice)
+                    .unwrap_or_else(|_| panic!("Failed to deserialize R"));
+                println!("-------Got peer # {:} pk! {:?}", from, pk * &eight_inv);
+                self.add_pk(from, pk * &eight_inv);
             }
             _ => panic!("expected public key message"),
         }
@@ -301,7 +303,7 @@ impl EddsaPeer {
                 self.commitment_msg = Some(generate_commitment_message_payload(&json_string));
                 self.r_msg = Some(generate_R_message_payload(&r));
             }
-            Err(_e) => panic!("Couldn't serialize commitment"),
+            Err(_) => panic!("Couldn't serialize commitment"),
         }
     }
 
@@ -333,13 +335,9 @@ impl EddsaPeer {
                     .unwrap_or_else(|| panic!("Client has No R "))
                     .clone();
                 let _r: SignSecondMsg =
-                    serde_json::from_str(&r).unwrap_or_else(|_e| panic!("failed to deserialize R"));
+                    serde_json::from_str(&r).unwrap_or_else(|_| panic!("Failed to deserialize R"));
                 let key = &self.client_key;
                 // sign
-                let _g: GE = ECPoint::generator();
-                let _eight: FE = ECScalar::from(&BigInt::from(8));
-                //  println!("rG {:?}", g * &key.expended_private_key.private_key * &eight );
-                let _pk = self.pks.get_mut(&peer_id).unwrap();
                 let s = Signature::partial_sign(&eph_key.r, key, &k, &agg_key.hash, &r_tot);
                 let sig_string = serde_json::to_string(&s).expect("failed to serialize signature");
                 self.sig_msg = Some(generate_signature_message_payload(&sig_string));
@@ -483,7 +481,7 @@ impl Peer for EddsaPeer {
                 .expect("Unable to save !");
                 Ok(())
             }
-            Err(_e) => Err("Failed to verify"),
+            Err(_) => Err("Failed to verify"),
         }
     }
     /// check that the protocol is done
@@ -627,7 +625,7 @@ impl<T: Peer> Client<T> {
                     Ok(next_msg) => {
                         new_message = Some(next_msg.clone());
                     }
-                    Err(_e) => {
+                    Err(_) => {
                         println!("Error in handle_server_response");
                     }
                 }
@@ -721,7 +719,7 @@ impl<T: Peer> Client<T> {
         let message = self
             .data_manager
             .initialize_data(peer_id)
-            .unwrap_or_else(|| panic!("failed to initialize"));
+            .unwrap_or_else(|| panic!("Failed to initialize"));
         Ok(self.generate_relay_message(message.clone()))
     }
 
@@ -755,8 +753,8 @@ impl<T: Peer> Client<T> {
                 }
             }
             _ => {
-                println!("didn't handle error correctly");
-                return Err("error response handling failed");
+                println!("Didn't handle error correctly");
+                return Err("Error response handling failed");
             }
         }
     }
@@ -774,7 +772,7 @@ impl<T: Peer> Client<T> {
                         println!("sending peers first message: {:#?}", _msg);
                         return Ok(_msg.clone());
                     }
-                    Err(_e) => {
+                    Err(_) => {
                         println!("error occured");
                         return Ok(ClientMessage::new());
                     }
@@ -786,8 +784,8 @@ impl<T: Peer> Client<T> {
                 let msg = self.handle_error_response(err_msg_slice);
                 match msg {
                     Ok(_msg) => return Ok(_msg),
-                    Err(_e) => {
-                        println!("error occured");
+                    Err(_) => {
+                        println!("Error occured");
                         return Ok(ClientMessage::new());
                     }
                 }
@@ -829,7 +827,7 @@ fn main() {
     let message_str = env::args().nth(3).unwrap_or("".to_string());
     let message_to_sign = match hex::decode(opt.message.clone()) {
         Ok(x) => x,
-        Err(_e) => message_str.as_bytes().to_vec(),
+        Err(_) => message_str.as_bytes().to_vec(),
     };
 
     // Create the event loop and initiate the connection to the remote server
@@ -845,19 +843,20 @@ fn main() {
         )));
 
     let handshake = tcp.and_then(|stream| {
-        let handshake_io = stream.framed(ClientToServerCodec::new());
+        let handshake_io = Framed::new(stream, ClientToServerCodec::new(false));
         let mut client = session.lock().unwrap();
         let msg = client.generate_register_message();
         handshake_io
             .send(msg)
             .map(|handshake_io| handshake_io.into_inner())
+            .map_err(|e| e.into())
     });
 
     let client = handshake.and_then(|socket| {
         let mut client = session.lock().unwrap();
         let _msg = client.generate_register_message();
 
-        let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
+        let (to_server, from_server) = Framed::new(socket, ClientToServerCodec::new(false)).split();
         let (tx, rx) = mpsc::channel(0);
         let reader = from_server.for_each(move |msg| {
             println!("Received {:?}", msg);
@@ -872,7 +871,7 @@ fn main() {
         reader
             .select(writer)
             .map(|_| println!("Closing connection"))
-            .map_err(|(err, _)| err)
+            .map_err(|(err, _)| err.into())
     });
 
     core.run(client).unwrap();

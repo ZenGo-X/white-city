@@ -3,10 +3,9 @@
 /// server
 use std::env;
 use std::net::SocketAddr;
-use std::{thread, time};
 
 use std::sync::{Arc, Mutex};
-use tokio_core::io::Io;
+use tokio::codec::Framed;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Core;
 
@@ -143,19 +142,20 @@ fn main() {
     let session: std::sync::Arc<std::sync::Mutex<Client>> = Arc::new(Mutex::new(Client::new()));
 
     let handshake = tcp.and_then(|stream| {
-        let handshake_io = stream.framed(ClientToServerCodec::new());
+        let handshake_io = Framed::new(stream, ClientToServerCodec::new(false));
         let mut client = session.lock().unwrap();
         let msg = client.generate_register_message();
         handshake_io
             .send(msg)
             .map(|handshake_io| handshake_io.into_inner())
+            .map_err(|e| e.into())
     });
 
     let client = handshake.and_then(|socket| {
         let mut client = session.lock().unwrap();
         let _msg = client.generate_register_message();
 
-        let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
+        let (to_server, from_server) = Framed::new(socket, ClientToServerCodec::new(false)).split();
         let (tx, rx) = mpsc::channel(0);
         let reader = from_server.for_each(move |msg| {
             println!("Received {:?}", msg);
@@ -170,7 +170,7 @@ fn main() {
         reader
             .select(writer)
             .map(|_| println!("Closing connection"))
-            .map_err(|(err, _)| err)
+            .map_err(|(err, _)| err.into())
     });
 
     core.run(client).unwrap();

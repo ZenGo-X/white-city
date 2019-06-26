@@ -34,6 +34,7 @@ pub fn generate_commitment_message_payload(cmtnmt: &String) -> MessagePayload {
     );
 }
 
+#[allow(non_snake_case)]
 pub fn generate_R_message_payload(r: &String) -> MessagePayload {
     return format!(
         "{prefix}{delimiter}{message}",

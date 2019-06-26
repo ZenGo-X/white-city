@@ -323,7 +323,7 @@ impl RelaySession {
                 CANT_REGISTER_RESPONSE,
             )));
         }
-        // Send message to al
+        // Send message to all
         match *self.state.read().unwrap() {
             RelaySessionState::Initialized => {
                 // Once server is initialized, send register message to all
@@ -384,16 +384,17 @@ impl RelaySession {
         info!("Connection closed.");
         let mut to = Vec::new();
         // Read registered peers then release the read() lock
-        {
-            self.peers
-                .read()
-                .unwrap()
-                .values()
-                .filter(|p| p.registered)
-                .for_each(|p| {
-                    to.push(p.peer_id);
-                });
-        }
+        let peers = self
+            .peers
+            .read()
+            .unwrap()
+            .values()
+            .filter(|p| p.registered)
+            .for_each(|p| {
+                to.push(p.peer_id);
+            });
+        drop(peers);
+
         let mut peer_disconnected = false;
         let mut peer_id = 0;
 
