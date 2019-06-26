@@ -189,5 +189,5 @@ struct RegisterResponse {
 }
 
 // in: clientMessage out:serverMessage
-pub type ServerToClientCodec = tokio_jsoncodec::Codec<ClientMessage, ServerMessage>;
-pub type ClientToServerCodec = tokio_jsoncodec::Codec<ServerMessage, ClientMessage>;
+pub type ServerToClientCodec = json_codec::Codec<ClientMessage, ServerMessage>;
+pub type ClientToServerCodec = json_codec::Codec<ServerMessage, ClientMessage>;
