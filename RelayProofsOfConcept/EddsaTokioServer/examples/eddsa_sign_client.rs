@@ -62,7 +62,7 @@ struct Opt {
 #[allow(non_snake_case)]
 struct EddsaPeer {
     // this peers identifier in this session
-    pub peer_id: RefCell<PeerIdentifier>,
+    pub peer_id: PeerIdentifier,
     // # of participants
     pub capacity: u32,
 
@@ -134,7 +134,7 @@ impl EddsaPeer {
             pks.push(pk.clone());
         }
         println!("# of public keys : {:?}", pks.len());
-        let peer_id = self.peer_id.clone().into_inner();
+        let peer_id = self.peer_id;
         let index = (peer_id - 1) as usize;
         let agg_key = if self.kg_index == peer_id {
             KeyPair::key_aggregation_n(&pks, &index)
@@ -187,7 +187,7 @@ impl EddsaPeer {
         let eight_inv = eight.invert();
         match payload_type {
             MessagePayloadType::PublicKey(pk) => {
-                let peer_id = self.peer_id.clone().into_inner();
+                let peer_id = self.peer_id;
                 if from == peer_id {
                     self.pk_accepted = true;
                 }
@@ -206,7 +206,7 @@ impl EddsaPeer {
         match payload_type {
             MessagePayloadType::Commitment(t) => {
                 println!("-------Got peer # {:} commitment! {:?}", from, t);
-                let peer_id = self.peer_id.clone().into_inner();
+                let peer_id = self.peer_id;
                 if from == peer_id {
                     self.commitment_accepted = true;
                 }
@@ -221,7 +221,7 @@ impl EddsaPeer {
         match payload_type {
             MessagePayloadType::RMessage(r) => {
                 println!("-------Got peer # {:} R message!", from);
-                let peer_id = self.peer_id.clone().into_inner();
+                let peer_id = self.peer_id;
                 if from == peer_id {
                     self.r_accepted = true;
                 }
@@ -237,7 +237,7 @@ impl EddsaPeer {
         match payload_type {
             MessagePayloadType::Signature(s) => {
                 println!("-------Got peer # {:} Signature", from);
-                let peer_id = self.peer_id.clone().into_inner();
+                let peer_id = self.peer_id;
                 if from == peer_id {
                     self.sig_accepted = true;
                 }
@@ -293,7 +293,7 @@ impl EddsaPeer {
 
         self.ephemeral_key = Some(ephemeral_key);
         // save the commitment
-        let _peer_id = self.peer_id.clone().into_inner();
+        let _peer_id = self.peer_id;
         match serde_json::to_string(&sign_first_message) {
             Ok(json_string) => {
                 //                self.add_commitment(peer_id, json_string.clone());
@@ -326,7 +326,7 @@ impl EddsaPeer {
         match self.ephemeral_key {
             Some(ref eph_key) => {
                 let k = Signature::k(&r_tot, &agg_key.apk, &self.message[..]);
-                let peer_id = self.peer_id.clone().into_inner();
+                let peer_id = self.peer_id;
                 let r = self
                     .r_s
                     .get(&peer_id)
@@ -383,7 +383,7 @@ impl Peer for EddsaPeer {
             sigs: HashMap::new(),
             capacity,
             message: _message,
-            peer_id: RefCell::new(0),
+            peer_id: 0,
             agg_key: None,
             kg_index,
             current_step: 0,
@@ -403,7 +403,7 @@ impl Peer for EddsaPeer {
     }
 
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
-        self.peer_id.replace(peer_id);
+        self.peer_id = peer_id;
         let pk/*:Ed25519Point */= self.client_key.public_key.clone();
         //self.add_pk(peer_id, pk);
 
@@ -473,7 +473,7 @@ impl Peer for EddsaPeer {
                 R_vec.extend_from_slice(&s_vec[..]);
 
                 fs::write(
-                    "signature".to_string(),
+                    format!("signature{}", self.peer_id),
                     BigInt::from(&R_vec[..]).to_str_radix(16),
                 )
                 .expect("Unable to save !");
@@ -523,7 +523,7 @@ pub trait Peer {
 }
 
 struct ProtocolDataManager<T: Peer> {
-    pub peer_id: RefCell<PeerIdentifier>,
+    pub peer_id: PeerIdentifier,
     pub capacity: u32,
     pub current_step: u32,
     pub data_holder: T, // will be filled when initializing, and on each new step
@@ -537,7 +537,7 @@ impl<T: Peer> ProtocolDataManager<T> {
         T: Peer,
     {
         ProtocolDataManager {
-            peer_id: RefCell::new(0),
+            peer_id: 0,
             current_step: 0,
             capacity,
             data_holder: Peer::new(capacity, message),
@@ -551,7 +551,7 @@ impl<T: Peer> ProtocolDataManager<T> {
     /// the protocol session
     /// return: first message
     pub fn initialize_data(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
-        self.peer_id.replace(peer_id);
+        self.peer_id = peer_id;
         let zero_step_data = self.data_holder.zero_step(peer_id);
         self.client_data = zero_step_data;
         return self.client_data.clone();
@@ -682,7 +682,7 @@ impl<T: Peer> Client<T> {
         // parse relay message
         let relay_msg = msg.relay_message.unwrap();
         let from = relay_msg.peer_number;
-        if from == self.data_manager.peer_id.clone().into_inner() {
+        if from == self.data_manager.peer_id {
             println!("-------self message accepted ------\n ");
         }
         let payload = relay_msg.message;
@@ -692,10 +692,8 @@ impl<T: Peer> Client<T> {
     fn generate_relay_message(&self, payload: MessagePayload) -> ClientMessage {
         let _msg = ClientMessage::new();
         // create relay message
-        let mut relay_message = RelayMessage::new(
-            self.data_manager.peer_id.clone().into_inner(),
-            self.protocol_id.clone(),
-        );
+        let mut relay_message =
+            RelayMessage::new(self.data_manager.peer_id, self.protocol_id.clone());
         let to: Vec<u32> = self.bc_dests.clone();
 
         let mut client_message = ClientMessage::new();
