@@ -66,7 +66,9 @@ pub struct RelaySession {
 }
 
 impl RelaySession {
-    pub fn get_number_of_active_peers(&self) -> u32 {
+    /// Returns the current number of active peers.
+    /// If a peer disconnects, it should be removed from the active peers
+    fn get_number_of_active_peers(&self) -> u32 {
         self.peers
             .read()
             .unwrap()
@@ -128,7 +130,7 @@ impl RelaySession {
 
     /// Checks if it is possible for this address
     /// to register as a peer in this session
-    pub fn can_register(&self, addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool {
+    fn can_register(&self, addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool {
         match *self.state.read().unwrap() {
             // if this is the first peer to register
             // check that the protocol is valid
@@ -164,7 +166,7 @@ impl RelaySession {
 
     /// check if this relay message sent from the given SocketAddr
     /// is valid to send to rest of the peers
-    pub fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
+    fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
         debug!("Checking if {:} can relay", msg.peer_number);
         debug!("Server state: {:?}", self.state.read().unwrap());
         debug!("Turn of peer #: {:}", self.protocol.read().unwrap().next());
@@ -225,14 +227,14 @@ impl RelaySession {
     }
 
     /// Removes a connection from the peers collection
-    pub fn remove(&self, addr: &SocketAddr) -> Option<Peer> {
+    fn remove(&self, addr: &SocketAddr) -> Option<Peer> {
         self.peers.write().unwrap().remove(addr)
     }
 
     /// Send a message from the server to a group of peers
     /// takes each peers 'tx' part of the mpsc channel, and uses it to send the message to the client
     /// this peer represents
-    pub fn multiple_send<E: 'static>(
+    fn multiple_send<E: 'static>(
         &self,
         message: ServerMessage,
         to: &Vec<PeerIdentifier>,
@@ -307,6 +309,7 @@ impl RelaySession {
         }
         self.multiple_send(server_msg, &_to)
     }
+
     /// try to register a new peer
     pub fn register<E: 'static>(
         &self,
@@ -445,7 +448,7 @@ mod tests {
     use futures::sync::mpsc;
     use relay_server_common::ProtocolIdentifier;
     use std::net::SocketAddr;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::thread;
 
     #[test]
@@ -507,7 +510,8 @@ mod tests {
         for child in children {
             let _ = child.join();
         }
-        let number_of_active_peers = rs.get_number_of_active_peers();
+        let rs_inner = Arc::clone(&rs);
+        let number_of_active_peers = rs_inner.get_number_of_active_peers();
         assert_eq!(number_of_active_peers, capacity);
     }
 }

@@ -22,7 +22,7 @@ Cargo.lock
 
 
 keys*
-signature
+signature*
 
 # Log files
 *.log

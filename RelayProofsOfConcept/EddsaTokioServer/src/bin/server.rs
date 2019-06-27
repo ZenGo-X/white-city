@@ -19,7 +19,7 @@ extern crate tokio_core;
 extern crate tokio_io;
 
 use clap::{App, Arg, ArgMatches};
-use relay_server::start_server;
+use relay_server::Server;
 use std::io;
 use std::net::SocketAddr;
 
@@ -120,5 +120,6 @@ fn main() {
 
     setup_logging(verbosity).expect("failed to initialize logging.");
 
-    start_server(&addr, capacity);
+    let server = Server::new(addr);
+    server.start_server(capacity);
 }
