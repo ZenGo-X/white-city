@@ -181,6 +181,7 @@ pub enum ClientMessageType {
     Abort,
     RelayMessage,
     Undefined,
+    Test,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]

@@ -1,3 +1,4 @@
+use futures::stream;
 use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
 use log::{debug, error, info, warn};
@@ -9,16 +10,16 @@ use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 
 use crate::relay_session::{Client, RelaySession};
-use relay_server_common::{ClientMessageType, ServerToClientCodec};
+use relay_server_common::{ClientMessageType, ServerMessage, ServerToClientCodec};
 
-pub struct Server {
+pub struct RelayServer {
     pub rs: Option<RelaySession>,
     addr: std::net::SocketAddr,
 }
 
-impl Server {
-    pub fn new(addr: SocketAddr) -> Server {
-        Server {
+impl RelayServer {
+    pub fn new(addr: SocketAddr) -> RelayServer {
+        RelayServer {
             rs: None,
             addr: addr,
         }
@@ -34,6 +35,7 @@ impl Server {
         info!("Listening on: {}", &self.addr);
 
         // Create the session fot the relay server
+        // TODO: Relay sessions should start when a new client connects
         let relay_session = Arc::new(RelaySession::new(capacity));
 
         let srv = listener.incoming().for_each(move |(socket, addr)| {
@@ -69,7 +71,12 @@ impl Server {
                             "Got register message. protocol id requested: {}",
                             register.protocol_id
                         );
-                        relay_session_inner.register(addr, register.protocol_id, register.capacity)
+                        let messages_to_send = relay_session_inner.register(
+                            addr,
+                            register.protocol_id,
+                            register.capacity,
+                        );
+                        RelayServer::send_messages(&messages_to_send)
                     }
                     ClientMessageType::RelayMessage => {
                         let peer = relay_session_inner
@@ -85,6 +92,13 @@ impl Server {
                             .unwrap_or_else(|| panic!("not a peer"));
                         debug!("Got abort message from {}", peer.peer_id);
                         relay_session_inner.abort(addr)
+                    }
+                    ClientMessageType::Test => {
+                        let sender = relay_session_inner
+                            .get_sender_by_address(&addr)
+                            .unwrap_or_else(|| panic!("not a peer"));
+                        let msg = ServerMessage::new();
+                        RelayServer::send_response(sender, msg)
                     }
                     ClientMessageType::Undefined => {
                         warn!("Got unknown or empty message");
@@ -132,5 +146,24 @@ impl Server {
 
         // execute server
         core.run(srv).unwrap();
+    }
+
+    pub fn send_messages<E: 'static>(
+        messages_to_send: &Vec<(ServerMessage, mpsc::Sender<ServerMessage>)>,
+    ) -> Box<dyn Future<Item = (), Error = E>> {
+        let sends = messages_to_send
+            .iter()
+            .map(|(msg, sink)| sink.clone().send(msg.clone()));
+        let send_stream = stream::futures_unordered(sends).then(|_| Ok(()));
+        Box::new(send_stream.for_each(|()| Ok(())))
+    }
+
+    pub fn send_response<E: 'static>(
+        tx: mpsc::Sender<ServerMessage>,
+        response: ServerMessage,
+    ) -> Box<dyn Future<Item = (), Error = E>> {
+        let sends = vec![tx.clone().send(response.clone())];
+        let send_stream = stream::futures_unordered(sends).then(|_| Ok(()));
+        Box::new(send_stream.for_each(|()| Ok(())))
     }
 }

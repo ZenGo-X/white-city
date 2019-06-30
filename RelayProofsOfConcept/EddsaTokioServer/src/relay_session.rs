@@ -10,7 +10,7 @@ use relay_server_common::{
     AbortMessage, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage, ServerResponse,
 };
 
-use relay_server_common::common::{CANT_REGISTER_RESPONSE, NOT_YOUR_TURN, STATE_NOT_INITIALIZED};
+use relay_server_common::common::{NOT_YOUR_TURN, STATE_NOT_INITIALIZED};
 
 use relay_server_common::protocol::ProtocolDescriptor;
 
@@ -279,6 +279,15 @@ impl RelaySession {
         }
     }
 
+    /// Try to send a server response to a specific address
+    pub fn get_sender_by_address(&self, addr: &SocketAddr) -> Option<mpsc::Sender<ServerMessage>> {
+        if let Some(peer) = self.get_peer_by_address(&addr) {
+            Some(peer.client.tx.clone())
+        } else {
+            None
+        }
+    }
+
     /// try to send a relay message to the desired peers
     pub fn relay_message<E: 'static>(
         &self,
@@ -310,44 +319,35 @@ impl RelaySession {
         self.multiple_send(server_msg, &_to)
     }
 
-    /// try to register a new peer
-    pub fn register<E: 'static>(
+    /// Register a new peer for the relay session.
+    /// Return a vector of register messages to send to all other peers if state is initialized
+    pub fn register(
         &self,
         addr: SocketAddr,
         protocol_id: ProtocolIdentifier,
         capacity: u32,
-    ) -> Box<dyn Future<Item = (), Error = E>> {
-        let mut server_msg = ServerMessage::new();
-        let peer_id = self.register_new_peer(addr, protocol_id, capacity);
-        if peer_id.is_some() {
-            server_msg.response = Some(ServerResponse::Register(peer_id.unwrap()));
-        } else {
-            server_msg.response = Some(ServerResponse::ErrorResponse(String::from(
-                CANT_REGISTER_RESPONSE,
-            )));
-        }
+    ) -> Vec<(ServerMessage, mpsc::Sender<ServerMessage>)> {
+        self.register_new_peer(addr, protocol_id, capacity);
         // Send message to all
         match *self.state.read().unwrap() {
             RelaySessionState::Initialized => {
-                // Once server is initialized, send register message to all
                 let peers = self.peers.read().unwrap();
-                let sends = peers.iter().map(|(_addr, peer)| {
-                    let mut server_msg = ServerMessage::new();
-                    server_msg.response = Some(ServerResponse::Register(peer.peer_id));
-                    debug!("Sending msg to peer {}: {:?}", peer.peer_id, server_msg);
-                    peer.client.tx.clone().send(server_msg.clone())
-                });
-
-                let send_stream = stream::futures_unordered(sends).then(|_| Ok(()));
-
-                // Convert the stream to a future that runs all the sends and box it up.
-                Box::new(send_stream.for_each(|()| Ok(())))
+                let sends = peers
+                    .iter()
+                    .map(|(_addr, peer)| {
+                        let mut server_msg = ServerMessage::new();
+                        server_msg.response = Some(ServerResponse::Register(peer.peer_id));
+                        (server_msg, peer.client.tx.clone())
+                    })
+                    .collect();
+                sends
             }
-            _ => Box::new(futures::future::ok(())),
+            _ => vec![],
         }
     }
 
-    /// abort this relay session and send abort message to all peers
+    /// Abort this relay session
+    /// Return a vector of abort messages message to all peers
     pub fn abort<E: 'static>(&self, addr: SocketAddr) -> Box<dyn Future<Item = (), Error = E>> {
         info!("Aborting");
         let mut server_msg = ServerMessage::new();
@@ -446,6 +446,7 @@ mod tests {
     use super::Client;
     use super::RelaySession;
     use futures::sync::mpsc;
+    use relay_server_common::protocol::ProtocolDescriptor;
     use relay_server_common::ProtocolIdentifier;
     use std::net::SocketAddr;
     use std::sync::Arc;
@@ -513,5 +514,69 @@ mod tests {
         let rs_inner = Arc::clone(&rs);
         let number_of_active_peers = rs_inner.get_number_of_active_peers();
         assert_eq!(number_of_active_peers, capacity);
+    }
+
+    #[test]
+    fn test_register() {
+        let protocol_id: ProtocolIdentifier = 1;
+        let capacity: u32 = 5;
+        let rs = RelaySession::new(capacity);
+
+        let mut peer_num: u32 = 0;
+        for i in 0..capacity {
+            let client_addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().unwrap();
+            let (tx, _) = mpsc::channel(0); //(8);
+            rs.insert_new_connection(client_addr.clone(), Client::new(tx));
+            peer_num = rs
+                .register_new_peer(client_addr, protocol_id, capacity)
+                .expect("Unable to register");
+        }
+
+        assert_eq!(peer_num, capacity);
+    }
+
+    #[test]
+    fn test_can_register_protocol_valid() {
+        let client_addr: SocketAddr = format!("127.0.0.1:8081").parse().unwrap();
+        let protocol_id: ProtocolIdentifier = 1 as ProtocolIdentifier;
+        let capacity: u32 = 5;
+        let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
+        let rs = RelaySession::new(capacity);
+        let (tx, _) = mpsc::channel(0); //(8);
+        rs.insert_new_connection(client_addr.clone(), Client::new(tx));
+        assert!(rs.can_register(&client_addr, protocol_descriptor))
+    }
+
+    #[test]
+    fn test_can_register_protocol_invalid() {
+        let client_addr: SocketAddr = format!("127.0.0.1:8081").parse().unwrap();
+        let protocol_id: ProtocolIdentifier = 100 as ProtocolIdentifier;
+        let capacity: u32 = 5;
+        let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
+        let rs = RelaySession::new(capacity);
+        let (tx, _) = mpsc::channel(0); //(8);
+        rs.insert_new_connection(client_addr.clone(), Client::new(tx));
+        assert!(!rs.can_register(&client_addr, protocol_descriptor))
+    }
+
+    #[test]
+    fn test_can_register_no_connection() {
+        let client_addr: SocketAddr = format!("127.0.0.1:8081").parse().unwrap();
+        let protocol_id: ProtocolIdentifier = 1 as ProtocolIdentifier;
+        let capacity: u32 = 5;
+        let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
+        let rs = RelaySession::new(capacity);
+        assert!(!rs.can_register(&client_addr, protocol_descriptor))
+    }
+
+    #[test]
+    fn test_can_register_already_connected() {
+        let client_addr: SocketAddr = format!("127.0.0.1:8081").parse().unwrap();
+        let protocol_id: ProtocolIdentifier = 1 as ProtocolIdentifier;
+        let capacity: u32 = 5;
+        let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
+        let rs = RelaySession::new(capacity);
+        rs.register(client_addr, protocol_id, capacity);
+        assert!(!rs.can_register(&client_addr, protocol_descriptor))
     }
 }
