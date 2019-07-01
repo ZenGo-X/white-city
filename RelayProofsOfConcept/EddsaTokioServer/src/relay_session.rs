@@ -104,20 +104,18 @@ impl RelaySession {
                 peer.peer_id = number_of_active_peers + 1;
                 // if needed, set the ProtocolDescriptor for this sessuib
                 // and change the state
-                let mut state = self.state.write().unwrap();
-                match *state {
+                let state = self.state();
+                match state {
                     RelaySessionState::Empty => {
                         let mut protocol = self.protocol.write().unwrap();
                         *protocol = ProtocolDescriptor::new(protocol_id, capacity);
-                        *state = RelaySessionState::Uninitialized;
+                        self.set_state(RelaySessionState::Uninitialized);
                     }
                     _ => {}
                 }
-                // realease state write lock
-                drop(state);
                 //if self.protocol.clone().into_inner().capacity == number_of_active_peers + 1 {
                 if self.protocol.read().unwrap().capacity == number_of_active_peers + 1 {
-                    *self.state.write().unwrap() = RelaySessionState::Initialized;
+                    self.set_state(RelaySessionState::Initialized);
                 }
                 return Some(number_of_active_peers + 1); //peer_id
             }
@@ -131,7 +129,7 @@ impl RelaySession {
     /// Checks if it is possible for this address
     /// to register as a peer in this session
     fn can_register(&self, addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool {
-        match *self.state.read().unwrap() {
+        match self.state() {
             // if this is the first peer to register
             // check that the protocol is valid
             RelaySessionState::Empty => {
@@ -168,10 +166,10 @@ impl RelaySession {
     /// is valid to send to rest of the peers
     fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
         debug!("Checking if {:} can relay", msg.peer_number);
-        debug!("Server state: {:?}", self.state.read().unwrap());
+        debug!("Server state: {:?}", self.state());
         debug!("Turn of peer #: {:}", self.protocol.read().unwrap().next());
 
-        match *self.state.read().unwrap() {
+        match self.state() {
             RelaySessionState::Initialized => {
                 debug!("Relay sessions state is initialized");
             }
@@ -329,7 +327,7 @@ impl RelaySession {
     ) -> Vec<(ServerMessage, mpsc::Sender<ServerMessage>)> {
         self.register_new_peer(addr, protocol_id, capacity);
         // Send message to all
-        match *self.state.read().unwrap() {
+        match self.state() {
             RelaySessionState::Initialized => {
                 let peers = self.peers.read().unwrap();
                 let sends = peers
@@ -351,13 +349,10 @@ impl RelaySession {
     pub fn abort<E: 'static>(&self, addr: SocketAddr) -> Box<dyn Future<Item = (), Error = E>> {
         info!("Aborting");
         let mut server_msg = ServerMessage::new();
-        let current_state = self.state.read().unwrap();
-        match *current_state {
+        match self.state() {
             RelaySessionState::Initialized => {}
             _ => return Box::new(futures::future::ok(())),
         }
-        // release state read lock
-        drop(current_state);
         let peer = self.get_peer_by_address(&addr);
         match peer {
             Some(p) => {
@@ -365,7 +360,7 @@ impl RelaySession {
                     p.peer_id,
                     self.protocol.read().unwrap().id,
                 ));
-                *self.state.write().unwrap() = RelaySessionState::Aborted;
+                self.set_state(RelaySessionState::Aborted);
                 let mut to = Vec::new();
                 let peers = self.peers.read().unwrap();
                 peers.values().filter(|p| p.registered).for_each(|p| {
@@ -423,7 +418,7 @@ impl RelaySession {
             info!("Connection closed with a peer. Aborting..");
             let mut server_msg = ServerMessage::new();
             server_msg.abort = Some(AbortMessage::new(peer_id, self.protocol.read().unwrap().id));
-            *self.state.write().unwrap() = RelaySessionState::Aborted;
+            self.set_state(RelaySessionState::Aborted);
             return self.multiple_send(server_msg, &to);
         }
         Box::new(futures::future::ok(()))
@@ -438,6 +433,16 @@ impl RelaySession {
             },
             None => None,
         }
+    }
+
+    // Return the current state of the relay session
+    pub fn state(&self) -> RelaySessionState {
+        self.state.read().unwrap().clone()
+    }
+
+    // Set the current relay session state to a new state
+    pub fn set_state(&self, new_state: RelaySessionState) {
+        *self.state.write().unwrap() = new_state;
     }
 }
 
