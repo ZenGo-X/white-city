@@ -69,7 +69,7 @@ pub struct RegisterMessage {
     pub capacity: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ServerMessageType {
     Response,
     Abort,

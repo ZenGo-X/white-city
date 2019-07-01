@@ -91,7 +91,8 @@ impl RelayServer {
                             .get_peer_by_address(&addr)
                             .unwrap_or_else(|| panic!("not a peer"));
                         debug!("Got abort message from {}", peer.peer_id);
-                        relay_session_inner.abort(addr)
+                        let messages_to_send = relay_session_inner.abort(addr);
+                        RelayServer::send_messages(&messages_to_send)
                     }
                     ClientMessageType::Test => {
                         let sender = relay_session_inner
@@ -102,7 +103,8 @@ impl RelayServer {
                     }
                     ClientMessageType::Undefined => {
                         warn!("Got unknown or empty message");
-                        relay_session_inner.abort(addr)
+                        let messages_to_send = relay_session_inner.abort(addr);
+                        RelayServer::send_messages(&messages_to_send)
                     }
                 }
             });
