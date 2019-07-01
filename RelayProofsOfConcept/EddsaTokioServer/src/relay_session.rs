@@ -1,6 +1,4 @@
-use futures::stream;
 use futures::sync::mpsc;
-use futures::{Future, Sink, Stream};
 use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -228,54 +226,6 @@ impl RelaySession {
         self.peers.write().unwrap().remove(addr)
     }
 
-    /// Send a message from the server to a group of peers
-    /// takes each peers 'tx' part of the mpsc channel, and uses it to send the message to the client
-    /// this peer represents
-    fn multiple_send<E: 'static>(
-        &self,
-        message: ServerMessage,
-        to: &Vec<PeerIdentifier>,
-    ) -> Box<dyn Future<Item = (), Error = E>> {
-        let peers = self.peers.read().unwrap();
-        // For each client, clone its `mpsc::Sender` (because sending consumes the sender) and
-        // start sending a clone of `message`. This produces an iterator of Futures.
-        //let all_sends = client_map.values().map(|client| client.tx.clone().send(message.clone()));
-        let sends = peers
-            .values()
-            .filter(|peer| {
-                let id = &(peer.peer_id as PeerIdentifier);
-                to.contains(id) && peer.registered
-            })
-            .map(|peer| {
-                debug!("Sending msg to peer {}: {:?}", peer.peer_id, message);
-                peer.client.tx.clone().send(message.clone())
-            });
-
-        let send_stream = stream::futures_unordered(sends).then(|_| Ok(()));
-
-        // Convert the stream to a future that runs all the sends and box it up.
-        Box::new(send_stream.for_each(|()| Ok(())))
-    }
-
-    /// Try to send a server response to a specific address
-    pub fn send_response<E: 'static>(
-        &self,
-        addr: SocketAddr,
-        response: ServerMessage,
-    ) -> Box<dyn Future<Item = (), Error = E>> /*-> Result<(),()>*/ {
-        let peers = self.peers.read().unwrap();
-        // For each client, clone its `mpsc::Sender` (b ecause sending consumes the sender) and
-        // start sending a clone of `message`. This produces an iterator of Futures.
-        //let all_sends = client_map.values().map(|client| client.tx.clone().send(message.clone()));
-        if let Some(_peer) = peers.get(&addr) {
-            let to = vec![_peer.peer_id as PeerIdentifier];
-            self.multiple_send(response, &to)
-        } else {
-            // TODO: Disconnect peer and end session
-            panic!("err")
-        }
-    }
-
     /// Try to send a server response to a specific address
     pub fn get_sender_by_address(&self, addr: &SocketAddr) -> Option<mpsc::Sender<ServerMessage>> {
         if let Some(peer) = self.get_peer_by_address(&addr) {
@@ -285,35 +235,43 @@ impl RelaySession {
         }
     }
 
-    /// try to send a relay message to the desired peers
-    pub fn relay_message<E: 'static>(
+    // Retrun a vecotor with the message and a sink of all peers
+    pub fn relay_message(
         &self,
         from: &SocketAddr,
         msg: RelayMessage,
-    ) -> Box<dyn Future<Item = (), Error = E>> {
+    ) -> Vec<(ServerMessage, mpsc::Sender<ServerMessage>)> {
         let mut server_msg = ServerMessage::new();
-        let mut _to = vec![];
-        let peer_id = self.peers.read().unwrap().get(from).unwrap().peer_id;
+        let sender = self.get_peer_by_address(from).unwrap();
+        let sender_id = sender.peer_id;
         let can_relay = self.can_relay(from, &msg);
         match can_relay {
             Ok(()) => {
                 server_msg.relay_message = Some(msg.clone());
-                _to = msg.to;
+                let peers = self.peers.read().unwrap();
+                let messages_to_send = peers
+                    .values()
+                    .filter(|peer| {
+                        let id = &(peer.peer_id as PeerIdentifier);
+                        msg.to.contains(id) && peer.registered
+                    })
+                    .map(|peer| (server_msg.clone(), peer.client.tx.clone()))
+                    .collect();
                 self.protocol.write().unwrap().advance_turn();
 
                 debug!(
                     "Sending relay message from peer {:?} to: {:?}",
-                    peer_id, _to
+                    sender_id, msg.to
                 );
+                messages_to_send
             }
             Err(err_msg) => {
                 // send an error response to sender
-                warn!("Peer {:} can not relay", peer_id);
+                warn!("Peer {:} can not relay", sender_id);
                 server_msg.response = Some(ServerResponse::ErrorResponse(String::from(err_msg)));
-                _to = vec![peer_id];
+                vec![(server_msg, sender.client.tx.clone())]
             }
         }
-        self.multiple_send(server_msg, &_to)
     }
 
     /// Register a new peer for the relay session.
@@ -343,77 +301,24 @@ impl RelaySession {
         }
     }
 
+    // Abort the current relay session
+    // Return an abort message to all connected peers
     pub fn abort(&self, addr: SocketAddr) -> Vec<(ServerMessage, mpsc::Sender<ServerMessage>)> {
-        if !(self.state() == RelaySessionState::Initialized) {
-            let peer = self.get_peer_by_address(&addr);
-            let mut server_msg = ServerMessage::new();
-            match peer {
-                Some(p) => {
-                    server_msg.abort = Some(AbortMessage::new(p.peer_id, self.protocol().id));
-                    self.set_state(RelaySessionState::Aborted);
-                    let peers = self.peers.read().unwrap();
-                    peers
-                        .iter()
-                        .map(|(_addr, peer)| (server_msg.clone(), peer.client.tx.clone()))
-                        .collect()
-                }
-                None => vec![],
+        warn!("Received abort, sending abort messages to all");
+        let peer = self.get_peer_by_address(&addr);
+        let mut server_msg = ServerMessage::new();
+        match peer {
+            Some(p) => {
+                server_msg.abort = Some(AbortMessage::new(p.peer_id, self.protocol().id));
+                self.set_state(RelaySessionState::Aborted);
+                let peers = self.peers.read().unwrap();
+                peers
+                    .iter()
+                    .map(|(_addr, peer)| (server_msg.clone(), peer.client.tx.clone()))
+                    .collect()
             }
-        } else {
-            vec![]
+            None => vec![],
         }
-    }
-
-    /// handle a closed connection
-    /// if it an active peer disconnected - abort the session
-    /// otherwise, simply remove the connection of this address from the peers collection
-    pub fn connection_closed<E: 'static>(
-        &self,
-        addr: SocketAddr,
-    ) -> Box<dyn Future<Item = (), Error = E>> {
-        info!("Connection closed.");
-        let mut to = Vec::new();
-        // Read registered peers then release the read() lock
-        let peers = self
-            .peers
-            .read()
-            .unwrap()
-            .values()
-            .filter(|p| p.registered)
-            .for_each(|p| {
-                to.push(p.peer_id);
-            });
-        drop(peers);
-
-        let mut peer_disconnected = false;
-        let mut peer_id = 0;
-
-        let peers = self.peers.write().unwrap();
-        // check if the address was a peer
-        let peer = peers.get(&addr);
-        if peer.is_some() {
-            let p = peer.unwrap();
-            if !p.registered {
-                self.remove(&addr);
-                return Box::new(futures::future::ok(()));
-            } else {
-                peer_id = p.peer_id;
-                peer_disconnected = true;
-                info!("Aborted from peer #: {:}", peer_id);
-            }
-        }
-
-        // Release peers write lock
-        drop(peers);
-
-        if peer_disconnected {
-            info!("Connection closed with a peer. Aborting..");
-            let mut server_msg = ServerMessage::new();
-            server_msg.abort = Some(AbortMessage::new(peer_id, self.protocol().id));
-            self.set_state(RelaySessionState::Aborted);
-            return self.multiple_send(server_msg, &to);
-        }
-        Box::new(futures::future::ok(()))
     }
 
     /// get a copy of Peer that addr represents
@@ -593,5 +498,30 @@ mod tests {
             .for_each(|(msg, _)| assert_eq!(msg.msg_type(), ServerMessageType::Response));
     }
 
-    /////////////////////////// test register ///////////////////////////////////
+    /////////////////////////// test abort ///////////////////////////////////
+    #[test]
+    fn test_abort() {
+        let protocol_id: ProtocolIdentifier = 1;
+        let capacity: u32 = 4;
+        let rs = RelaySession::new(capacity);
+
+        // State is empty at fist
+        for i in 0..capacity - 1 {
+            let client_addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().unwrap();
+            let (tx, _) = mpsc::channel(0);
+            rs.insert_new_connection(client_addr.clone(), Client::new(tx));
+            rs.register(client_addr, protocol_id, capacity);
+            // State is not initialized when not all are connected
+            assert_eq!(RelaySessionState::Uninitialized, rs.state());
+        }
+        let client_addr: SocketAddr = format!("127.0.0.1:808{}", 1).parse().unwrap();
+
+        let messages = rs.abort(client_addr);
+        // Once all are connected, state should initialize
+        assert_eq!(RelaySessionState::Aborted, rs.state());
+
+        messages
+            .iter()
+            .for_each(|(msg, _)| assert_eq!(msg.msg_type(), ServerMessageType::Abort));
+    }
 }

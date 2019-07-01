@@ -84,7 +84,8 @@ impl RelayServer {
                             .unwrap_or_else(|| panic!("not a peer"));
                         info!("Got relay message from {}", peer.peer_id);
                         let relay_msg = msg.relay_message.unwrap().clone();
-                        relay_session_inner.relay_message(&addr, relay_msg)
+                        let messages_to_send = relay_session_inner.relay_message(&addr, relay_msg);
+                        RelayServer::send_messages(&messages_to_send)
                     }
                     ClientMessageType::Abort => {
                         let peer = relay_session_inner
@@ -130,7 +131,7 @@ impl RelayServer {
                 connection
                     .map(|_| ())
                     .map_err(|(err, _)| {
-                        error!("\nERROR OCCURED: {:?}", err);
+                        error!("ERROR OCCURED: {:?}", err);
                         err
                     })
                     .then(move |_| {
@@ -139,7 +140,8 @@ impl RelayServer {
 
                         // this means either a peer disconnected - same as abort,
                         // or an active connection closed - which is allowed
-                        relay_session_inner.connection_closed(addr)
+                        let messages_to_send = relay_session_inner.abort(addr);
+                        RelayServer::send_messages(&messages_to_send)
                     }),
             );
 
@@ -150,6 +152,8 @@ impl RelayServer {
         core.run(srv).unwrap();
     }
 
+    // Recieves a vector of tuples, of a message and a Sink,
+    // Sends the message to the the Sink
     pub fn send_messages<E: 'static>(
         messages_to_send: &Vec<(ServerMessage, mpsc::Sender<ServerMessage>)>,
     ) -> Box<dyn Future<Item = (), Error = E>> {
@@ -160,6 +164,7 @@ impl RelayServer {
         Box::new(send_stream.for_each(|()| Ok(())))
     }
 
+    // Send a Server message to a specific Sink
     pub fn send_response<E: 'static>(
         tx: mpsc::Sender<ServerMessage>,
         response: ServerMessage,
