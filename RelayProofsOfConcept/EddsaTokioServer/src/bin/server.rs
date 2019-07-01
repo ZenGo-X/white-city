@@ -8,16 +8,7 @@
 //! To run the server: run this file and in another terminal, run:
 //!     cargo +nightly run --example connect 127.0.0.1:8080
 //! this will run a client that utilizes the server in some way
-extern crate chrono;
-extern crate clap;
-extern crate fern;
-extern crate futures;
-extern crate log;
-extern crate relay_server;
-extern crate relay_server_common;
-extern crate tokio_core;
-extern crate tokio_io;
-
+//!
 use clap::{App, Arg, ArgMatches};
 use relay_server::RelayServer;
 use std::io;

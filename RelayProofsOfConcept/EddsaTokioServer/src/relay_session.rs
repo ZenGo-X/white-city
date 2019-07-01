@@ -159,8 +159,8 @@ impl RelaySession {
         false
     }
 
-    /// check if this relay message sent from the given SocketAddr
-    /// is valid to send to rest of the peers
+    /// Check if this relay message sent from the given SocketAddr
+    /// and is valid to send to rest of the peers
     fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
         debug!("Checking if {:} can relay", msg.peer_number);
         debug!("Server state: {:?}", self.state());
@@ -191,9 +191,7 @@ impl RelaySession {
                 }
             }
         }
-        {
-            return Err("Not A peer");
-        }
+        return Err("Not A peer");
     }
 }
 
@@ -235,7 +233,7 @@ impl RelaySession {
         }
     }
 
-    // Retrun a vecotor with the message and a sink of all peers
+    /// Retrun a vecotor with the message and a sink of all peers
     pub fn relay_message(
         &self,
         from: &SocketAddr,
@@ -524,4 +522,5 @@ mod tests {
             .iter()
             .for_each(|(msg, _)| assert_eq!(msg.msg_type(), ServerMessageType::Abort));
     }
+
 }
