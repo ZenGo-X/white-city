@@ -107,14 +107,13 @@ impl RelaySession {
                 let state = self.state();
                 match state {
                     RelaySessionState::Empty => {
-                        let mut protocol = self.protocol.write().unwrap();
-                        *protocol = ProtocolDescriptor::new(protocol_id, capacity);
+                        self.set_protocol(ProtocolDescriptor::new(protocol_id, capacity));
                         self.set_state(RelaySessionState::Uninitialized);
                     }
                     _ => {}
                 }
                 //if self.protocol.clone().into_inner().capacity == number_of_active_peers + 1 {
-                if self.protocol.read().unwrap().capacity == number_of_active_peers + 1 {
+                if self.protocol().capacity == number_of_active_peers + 1 {
                     self.set_state(RelaySessionState::Initialized);
                 }
                 return Some(number_of_active_peers + 1); //peer_id
@@ -144,7 +143,7 @@ impl RelaySession {
             // check that the peer wants to register to the set protocol
             RelaySessionState::Uninitialized => {
                 debug!("Checking if protocol description is same as at protocol description");
-                let prot = self.protocol.read().unwrap();
+                let prot = self.protocol();
                 if !(prot.id == protocol.id && prot.capacity == protocol.capacity) {
                     warn!("Protocol description does not fit current configuration");
                     return false;
@@ -167,7 +166,7 @@ impl RelaySession {
     fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
         debug!("Checking if {:} can relay", msg.peer_number);
         debug!("Server state: {:?}", self.state());
-        debug!("Turn of peer #: {:}", self.protocol.read().unwrap().next());
+        debug!("Turn of peer #: {:}", self.protocol().next());
 
         match self.state() {
             RelaySessionState::Initialized => {
@@ -187,7 +186,7 @@ impl RelaySession {
         if let Some(p) = peer {
             if p.registered && p.peer_id == sender {
                 // check if it is this peers turn
-                if self.protocol.read().unwrap().next() == p.peer_id {
+                if self.protocol().next() == p.peer_id {
                     return Ok(());
                 } else {
                     return Err(NOT_YOUR_TURN);
@@ -417,7 +416,7 @@ impl RelaySession {
         if peer_disconnected {
             info!("Connection closed with a peer. Aborting..");
             let mut server_msg = ServerMessage::new();
-            server_msg.abort = Some(AbortMessage::new(peer_id, self.protocol.read().unwrap().id));
+            server_msg.abort = Some(AbortMessage::new(peer_id, self.protocol().id));
             self.set_state(RelaySessionState::Aborted);
             return self.multiple_send(server_msg, &to);
         }
@@ -443,6 +442,14 @@ impl RelaySession {
     // Set the current relay session state to a new state
     pub fn set_state(&self, new_state: RelaySessionState) {
         *self.state.write().unwrap() = new_state;
+    }
+
+    pub fn protocol(&self) -> ProtocolDescriptor {
+        self.protocol.read().unwrap().clone()
+    }
+
+    pub fn set_protocol(&self, protocol: ProtocolDescriptor) {
+        *self.protocol.write().unwrap() = protocol;
     }
 }
 
