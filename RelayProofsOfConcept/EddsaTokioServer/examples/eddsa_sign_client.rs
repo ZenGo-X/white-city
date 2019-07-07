@@ -1,3 +1,4 @@
+use rand::Rng;
 /// Implementation of a client that communicates with the relay server
 /// This client represents eddsa peer
 ///

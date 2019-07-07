@@ -6,6 +6,7 @@ pub static RELAY_ERROR_RESPONSE: &str = "Can't relay message";
 pub static STATE_NOT_INITIALIZED: &str = "Relay sessions state is not initialized";
 pub static RELAY_MESSAGE_DELIMITER: &str = ":::";
 pub static NOT_YOUR_TURN: &str = "Not this peers turn";
+pub static NOT_A_PEER: &str = "Not a peer";
 
 /// eddsa constants
 pub static PK_MESSAGE_PREFIX: &str = "PUBLIC_KEY";
