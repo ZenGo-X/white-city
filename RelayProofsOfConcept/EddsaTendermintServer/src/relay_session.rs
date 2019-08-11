@@ -3,36 +3,22 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
-use relay_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
-
-use relay_server_common::common::{NOT_A_PEER, NOT_YOUR_TURN, STATE_NOT_INITIALIZED};
+use relay_server_common::{PeerIdentifier, ProtocolIdentifier};
 
 use relay_server_common::protocol::ProtocolDescriptor;
-
-// Represents the communication channel to remote client
-#[derive(Clone, Debug)]
-pub struct Client {
-    nonce: String,
-}
-
-impl Client {
-    pub fn new(nonce: String) -> Client {
-        Client { nonce }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Peer {
     pub peer_id: PeerIdentifier,
-    client: Client,
+    pub addr: SocketAddr,
     pub registered: bool,
 }
 
 impl Peer {
-    pub fn new(client: Client) -> Peer {
+    pub fn new(addr: SocketAddr) -> Peer {
         Peer {
             peer_id: 0,
-            client,
+            addr: addr,
             registered: false,
         }
     }
@@ -45,8 +31,6 @@ pub enum RelaySessionState {
     Uninitialized,
 
     Initialized,
-
-    Aborted,
 }
 
 #[derive(Debug, Clone)]
@@ -89,14 +73,13 @@ impl RelaySession {
         info!("-----------------PEERS: {:?}---------------", self.peers);
         match self.can_register(_addr, protocol_descriptor) {
             true => {
-                let mut peers = self.peers.write().unwrap();
-                let peer = peers
-                    .get_mut(_addr)
-                    .unwrap_or_else(|| panic!("No conection"));
-
-                // activate this connection as a peer
+                let mut peer = Peer::new(addr);
                 peer.registered = true;
                 peer.peer_id = number_of_active_peers + 1;
+
+                self.peers.write().unwrap().insert(addr, peer);
+
+                // activate this connection as a peer
                 // if needed, set the ProtocolDescriptor for this sessuib
                 // and change the state
                 let state = self.state();
@@ -111,6 +94,7 @@ impl RelaySession {
                 if self.protocol().capacity == number_of_active_peers + 1 {
                     self.set_state(RelaySessionState::Initialized);
                 }
+                info!("Registered peer {}", number_of_active_peers + 1);
                 return Some(number_of_active_peers + 1); //peer_id
             }
             false => {
@@ -122,7 +106,7 @@ impl RelaySession {
 
     /// Checks if it is possible for this address
     /// to register as a peer in this session
-    fn can_register(&self, addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool {
+    fn can_register(&self, _addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool {
         match self.state() {
             // if this is the first peer to register
             // check that the protocol is valid
@@ -149,45 +133,7 @@ impl RelaySession {
                 return false;
             }
         }
-        // register the peer iff it has an active connection and did not register yet
-        if let Some(peer) = self.peers.read().unwrap().get(addr) {
-            return !peer.registered;
-        }
-        false
-    }
-
-    /// Check if this relay message sent from the given SocketAddr
-    /// and is valid to send to rest of the peers
-    fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
-        debug!("Checking if {:} can relay", msg.peer_number);
-        debug!("Server state: {:?}", self.state());
-        debug!("Turn of peer #: {:}", self.protocol().next());
-
-        match self.state() {
-            RelaySessionState::Initialized => {
-                debug!("Relay sessions state is initialized");
-            }
-            _ => {
-                debug!("Relay sessions state is not initialized");
-                return Err(STATE_NOT_INITIALIZED);
-            }
-        }
-        // validate the sender in the message (peer_number field) is the peer associated with this address
-        let sender = msg.peer_number;
-        let peer = self.get_peer_by_address(from);
-
-        // if peer is present and registered
-        if let Some(p) = peer {
-            if p.registered && p.peer_id == sender {
-                // check if it is this peers turn
-                if self.protocol().next() == p.peer_id {
-                    return Ok(());
-                } else {
-                    return Err(NOT_YOUR_TURN);
-                }
-            }
-        }
-        return Err(NOT_A_PEER);
+        true
     }
 }
 
@@ -205,17 +151,6 @@ impl RelaySession {
             )),
 
             state: Arc::new(RwLock::new(RelaySessionState::Empty)),
-        }
-    }
-
-    /// get a copy of Peer that addr represents
-    pub fn get_peer_by_address(&self, addr: &SocketAddr) -> Option<Peer> {
-        match self.peers.read().unwrap().get(addr) {
-            Some(p) => match p.registered {
-                true => Some(p.clone()),
-                false => None,
-            },
-            None => None,
         }
     }
 
@@ -243,13 +178,8 @@ mod tests {
     use super::RelaySession;
     use super::RelaySessionState;
 
-    use futures::sync::mpsc;
-
-    use relay_server_common::common::{NOT_A_PEER, NOT_YOUR_TURN, STATE_NOT_INITIALIZED};
     use relay_server_common::protocol::ProtocolDescriptor;
-    use relay_server_common::{
-        ClientMessage, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessageType,
-    };
+    use relay_server_common::ProtocolIdentifier;
 
     use std::net::SocketAddr;
     use std::sync::Arc;
@@ -275,10 +205,10 @@ mod tests {
         let mut peer_num: u32 = 0;
         for i in 0..capacity {
             let client_addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().unwrap();
-            let (tx, _) = mpsc::channel(0);
             peer_num = rs
                 .register_new_peer(client_addr, protocol_id, capacity)
                 .expect("Unable to register");
+            println!("Peer number is {}", peer_num);
         }
 
         assert_eq!(peer_num, capacity);
@@ -296,7 +226,6 @@ mod tests {
             let rs_inner = Arc::clone(&rs);
 
             let client_addr: SocketAddr = format!("127.0.0.1:80{}", 30 + i).parse().unwrap();
-            let (tx, _) = mpsc::channel(0);
             children.push(thread::spawn(move || {
                 rs_inner
                     .register_new_peer(client_addr, protocol_id, capacity)
@@ -319,7 +248,6 @@ mod tests {
         let capacity: u32 = 5;
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
         let rs = RelaySession::new(capacity);
-        let (tx, _) = mpsc::channel(0);
         assert!(rs.can_register(&client_addr, protocol_descriptor))
     }
 
@@ -330,28 +258,6 @@ mod tests {
         let capacity: u32 = 5;
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
         let rs = RelaySession::new(capacity);
-        let (tx, _) = mpsc::channel(0);
-        assert!(!rs.can_register(&client_addr, protocol_descriptor))
-    }
-
-    #[test]
-    fn test_can_register_no_connection() {
-        let client_addr: SocketAddr = format!("127.0.0.1:8081").parse().unwrap();
-        let protocol_id: ProtocolIdentifier = 1 as ProtocolIdentifier;
-        let capacity: u32 = 5;
-        let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
-        let rs = RelaySession::new(capacity);
-        assert!(!rs.can_register(&client_addr, protocol_descriptor))
-    }
-
-    #[test]
-    fn test_can_register_already_connected() {
-        let client_addr: SocketAddr = format!("127.0.0.1:8081").parse().unwrap();
-        let protocol_id: ProtocolIdentifier = 1 as ProtocolIdentifier;
-        let capacity: u32 = 5;
-        let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
-        let rs = RelaySession::new(capacity);
-        rs.register_new_peer(client_addr, protocol_id, capacity);
         assert!(!rs.can_register(&client_addr, protocol_descriptor))
     }
 
@@ -366,13 +272,11 @@ mod tests {
         assert_eq!(RelaySessionState::Empty, rs.state());
         for i in 0..capacity - 1 {
             let client_addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().unwrap();
-            let (tx, _) = mpsc::channel(0);
             rs.register_new_peer(client_addr, protocol_id, capacity);
             // State is not initialized when not all are connected
             assert_eq!(RelaySessionState::Uninitialized, rs.state());
         }
         let client_addr: SocketAddr = format!("127.0.0.1:808{}", capacity - 1).parse().unwrap();
-        let (tx, _) = mpsc::channel(0);
         let messages = rs.register_new_peer(client_addr, protocol_id, capacity);
         // Once all are connected, state should initialize
         assert_eq!(RelaySessionState::Initialized, rs.state());

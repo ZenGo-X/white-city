@@ -41,7 +41,9 @@ fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
     let mut base_config = fern::Dispatch::new();
 
     base_config = match verbosity {
-        0 => base_config.level(log::LevelFilter::Warn),
+        0 => base_config
+            .level(log::LevelFilter::Info)
+            .level_for("abci::server", log::LevelFilter::Warn), // filter out abci::server
         1 => base_config
             .level(log::LevelFilter::Debug)
             .level_for("tokio_core", log::LevelFilter::Warn) // filter out tokio

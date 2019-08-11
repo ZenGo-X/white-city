@@ -1,4 +1,4 @@
-use crate::relay_session::{Client, RelaySession};
+use crate::relay_session::RelaySession;
 use abci::{RequestCheckTx, RequestQuery, ResponseCheckTx, ResponseQuery};
 use log::{debug, error, info, warn};
 use relay_server_common::{ClientMessage, ClientMessageType, ServerMessage};
@@ -37,6 +37,7 @@ impl abci::Application for RelayApp {
                     register.protocol_id
                 );
                 let messages_to_send = self.relay_session.register_new_peer(
+                    // This is a palce holder, client can sent its address/pub key/nonce
                     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
                     register.protocol_id,
                     register.capacity,
