@@ -33,7 +33,7 @@ bincode = "1"
 
 
 
-relay-server-common = { path = "../EddsaTokioServer/relay-server-common" }
+relay-server-common = { path = "../EddsaTendermintServer/relay-server-common" }
 
 multi-party-ed25519 = { git = "https://github.com/KZen-networks/multi-party-eddsa" }
 

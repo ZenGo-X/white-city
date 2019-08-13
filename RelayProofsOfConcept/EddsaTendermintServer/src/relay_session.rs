@@ -106,7 +106,7 @@ impl RelaySession {
 
     /// Checks if it is possible for this address
     /// to register as a peer in this session
-    fn can_register(&self, _addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool {
+    pub fn can_register(&self, _addr: &SocketAddr, protocol: ProtocolDescriptor) -> bool {
         match self.state() {
             // if this is the first peer to register
             // check that the protocol is valid

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::vec::Vec;
 use tokio_jsoncodec::Codec as JsonCodec;
+use std::net::SocketAddr;
 
 pub mod common;
 pub mod protocol;
@@ -62,8 +63,10 @@ impl AbortMessage {
     }
 }
 
-#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RegisterMessage {
+    pub addr: SocketAddr,
+
     pub protocol_id: ProtocolIdentifier,
 
     pub capacity: u32,
@@ -137,8 +140,9 @@ impl ClientMessage {
         }
     }
 
-    pub fn register(&mut self, protocol_id: ProtocolIdentifier, capacity: u32) {
+    pub fn register(&mut self, addr: SocketAddr, protocol_id: ProtocolIdentifier, capacity: u32) {
         self.register = Some(RegisterMessage {
+            addr,
             protocol_id,
             capacity,
         });

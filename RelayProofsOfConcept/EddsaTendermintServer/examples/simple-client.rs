@@ -1,4 +1,5 @@
 use serde_json::{Error, Map, Value};
+use std::net::SocketAddr;
 use subtle_encoding::base64;
 use tendermint::rpc::Client;
 
@@ -88,13 +89,15 @@ impl SessionClient {
                 //Ok(MessageProcessResult::NoMessage)
                 Ok(ClientMessage::new())
             }
+
             ServerMessageType::Undefined => Ok(ClientMessage::new()),
         }
     }
 
     pub fn generate_register_message(&self) -> ClientMessage {
         let mut msg = ClientMessage::new();
-        msg.register(self.session.protocol_id, 2);
+        let client_addr: SocketAddr = format!("127.0.0.1:808{}", 0).parse().unwrap();
+        msg.register(client_addr, self.session.protocol_id, 2);
         msg
     }
 }
@@ -108,10 +111,12 @@ fn main() {
     let client = Client::new(&"tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
 
     let mut msg = ClientMessage::new();
-    msg.register(0, 2);
+    let client_addr: SocketAddr = format!("127.0.0.1:808{}", 0).parse().unwrap();
+    msg.register(client_addr, 0, 2);
 
     println!("Regsiter message {:?}", msg);
     let tx = tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
-    let response = client.broadcast_tx_sync(tx).unwrap();
+    let response = client.broadcast_tx_commit(tx).unwrap();
+
     println!("{:?}", response);
 }
