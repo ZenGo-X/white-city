@@ -5,7 +5,7 @@ use abci::{
 };
 use log::{debug, error, info, warn};
 use relay_server_common::protocol::ProtocolDescriptor;
-use relay_server_common::{ClientMessage, ClientMessageType, ServerMessage};
+use relay_server_common::{ClientMessage, ClientMessageType, ServerMessage, ServerResponse};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 pub struct RelayApp {
@@ -86,9 +86,11 @@ impl abci::Application for RelayApp {
                     .unwrap();
                 resp.set_code(0);
                 info!("Setting data to {:?}", resp.data);
-                resp.set_log(client_index.to_string());
-                // TODO enable for higher numbers, set data and not log
-                // resp.set_data(vec![client_index as u8]);
+                let mut server_msg = ServerMessage::new();
+                server_msg.response = Some(ServerResponse::Register(client_index));
+                // TODO: Currently using log and not data, data is expecting a different encoding,
+                // sigh
+                resp.set_log(serde_json::to_string(&server_msg).unwrap().to_owned());
             }
             _ => unimplemented!("This is not yet implemented"),
         }
