@@ -4,9 +4,28 @@ use subtle_encoding::base64;
 use tendermint::rpc::Client;
 
 use relay_server_common::{
-    ClientMessage, ClientToServerCodec, PeerIdentifier, ProtocolIdentifier, RelayMessage,
-    ServerMessage, ServerMessageType, ServerResponse,
+    ClientMessage, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage,
+    ServerMessageType, ServerResponse,
 };
+
+use clap::{App, Arg, ArgMatches};
+
+fn arg_matches<'a>() -> ArgMatches<'a> {
+    App::new("relay-server")
+        .arg(
+            Arg::with_name("index")
+                .short("I")
+                .long("index")
+                .default_value("1"),
+        )
+        .arg(
+            Arg::with_name("capacity")
+                .default_value("2")
+                .short("P")
+                .long("capacity"),
+        )
+        .get_matches()
+}
 
 // ClientSession holds session data
 #[derive(Default, Debug, Clone)]
@@ -108,15 +127,35 @@ fn main() {
         .lineno_suffix(true)
         .install();
 
+    let matches = arg_matches();
+
+    let index: u32 = matches
+        .value_of("index")
+        .unwrap()
+        .parse()
+        .expect("Unable to parse index");
+
+    let capacity: u32 = matches
+        .value_of("capacity")
+        .unwrap()
+        .parse()
+        .expect("Invalid number of participants");
+
     let client = Client::new(&"tcp://127.0.0.1:26657".parse().unwrap()).unwrap();
 
     let mut msg = ClientMessage::new();
-    let client_addr: SocketAddr = format!("127.0.0.1:808{}", 0).parse().unwrap();
-    msg.register(client_addr, 0, 2);
+    let client_addr: SocketAddr = format!("127.0.0.1:808{}", index).parse().unwrap();
+    msg.register(client_addr, 0, capacity);
 
     println!("Regsiter message {:?}", msg);
     let tx = tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
     let response = client.broadcast_tx_commit(tx).unwrap();
+    let client_index = response.clone().deliver_tx.log.unwrap();
+    println!("Registered OK");
+    println!("Index {:?}", client_index);
+    let client_index: u32 = client_index.to_string().parse::<u32>().unwrap();
+    println!("Index {:?}", client_index);
 
-    println!("{:?}", response);
+    let mut msg = ClientMessage::new();
+    msg.register(client_addr, 0, capacity);
 }

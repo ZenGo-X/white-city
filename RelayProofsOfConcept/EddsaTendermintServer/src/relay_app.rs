@@ -80,21 +80,30 @@ impl abci::Application for RelayApp {
                     "Got register message. protocol id requested: {}",
                     register.protocol_id
                 );
-                self.relay_session.register_new_peer(
-                    register.addr,
-                    register.protocol_id,
-                    register.capacity,
-                );
+                let client_index = self
+                    .relay_session
+                    .register_new_peer(register.addr, register.protocol_id, register.capacity)
+                    .unwrap();
+                resp.set_code(0);
+                info!("Setting data to {:?}", resp.data);
+                resp.set_log(client_index.to_string());
+                // TODO enable for higher numbers, set data and not log
+                // resp.set_data(vec![client_index as u8]);
             }
             _ => unimplemented!("This is not yet implemented"),
         }
 
-        resp.set_code(0);
         resp
     }
 
     fn query(&mut self, req: &RequestQuery) -> ResponseQuery {
         let mut resp = ResponseQuery::new();
+
+        let c = convert_tx(&req.data);
+        info!("Received {:?} In Query", c);
+        let client_message: ClientMessage = serde_json::from_slice(&req.data).unwrap();
+        info!("Value is {:?} In Query", client_message);
+
         resp.set_code(0);
         info!("Code is {}", resp.get_code());
         resp.set_log(String::from("Exists"));

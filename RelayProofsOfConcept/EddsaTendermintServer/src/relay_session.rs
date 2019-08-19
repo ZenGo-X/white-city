@@ -71,37 +71,38 @@ impl RelaySession {
 
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
         info!("-----------------PEERS: {:?}---------------", self.peers);
-        match self.can_register(_addr, protocol_descriptor) {
-            true => {
-                let mut peer = Peer::new(addr);
-                peer.registered = true;
-                peer.peer_id = number_of_active_peers + 1;
+        if self.can_register(_addr, protocol_descriptor) {
+            let mut peer = Peer::new(addr);
+            peer.registered = true;
+            peer.peer_id = number_of_active_peers + 1;
 
-                self.peers.write().unwrap().insert(addr, peer);
+            self.peers.write().unwrap().insert(addr, peer);
 
-                // activate this connection as a peer
-                // if needed, set the ProtocolDescriptor for this sessuib
-                // and change the state
-                let state = self.state();
-                match state {
-                    RelaySessionState::Empty => {
-                        self.set_protocol(ProtocolDescriptor::new(protocol_id, capacity));
-                        self.set_state(RelaySessionState::Uninitialized);
-                    }
-                    _ => {}
-                }
-                //if self.protocol.clone().into_inner().capacity == number_of_active_peers + 1 {
-                if self.protocol().capacity == number_of_active_peers + 1 {
-                    self.set_state(RelaySessionState::Initialized);
-                }
-                info!("Registered peer {}", number_of_active_peers + 1);
-                return Some(number_of_active_peers + 1); //peer_id
+            // activate this connection as a peer
+            // if needed, set the ProtocolDescriptor for this sessuib
+            // and change the state
+            let state = self.state();
+            if let RelaySessionState::Empty = state {
+                self.set_protocol(ProtocolDescriptor::new(protocol_id, capacity));
+                info!("Relay session state is now Uninitialized");
+                self.set_state(RelaySessionState::Uninitialized);
             }
-            false => {
-                warn!("Unable to register {:}", addr); // error
-                None
+            //if self.protocol.clone().into_inner().capacity == number_of_active_peers + 1 {
+            if self.protocol().capacity == number_of_active_peers + 1 {
+                info!("Relay session state is now Initialized");
+                self.set_state(RelaySessionState::Initialized);
             }
+            info!("Registered peer {}", number_of_active_peers + 1);
+            Some(number_of_active_peers + 1) //peer_id
+        } else {
+            warn!("Unable to register {:}", addr); // error
+            None
         }
+    }
+
+    /// Return next index for a client
+    pub fn next_client_index(&self) -> u32 {
+        self.get_number_of_active_peers() + 1
     }
 
     /// Checks if it is possible for this address
@@ -243,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_can_register_protocol_valid() {
-        let client_addr: SocketAddr = format!("127.0.0.1:8081").parse().unwrap();
+        let client_addr: SocketAddr = "127.0.0.1:8081".to_string().parse().unwrap();
         let protocol_id: ProtocolIdentifier = 1 as ProtocolIdentifier;
         let capacity: u32 = 5;
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
@@ -253,7 +254,7 @@ mod tests {
 
     #[test]
     fn test_can_register_protocol_invalid() {
-        let client_addr: SocketAddr = format!("127.0.0.1:8081").parse().unwrap();
+        let client_addr: SocketAddr = "127.0.0.1:8081".to_string().parse().unwrap();
         let protocol_id: ProtocolIdentifier = 100 as ProtocolIdentifier;
         let capacity: u32 = 5;
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);

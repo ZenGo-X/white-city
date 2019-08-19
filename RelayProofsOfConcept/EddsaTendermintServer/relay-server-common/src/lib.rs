@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::vec::Vec;
 use tokio_jsoncodec::Codec as JsonCodec;
-use std::net::SocketAddr;
 
 pub mod common;
 pub mod protocol;
