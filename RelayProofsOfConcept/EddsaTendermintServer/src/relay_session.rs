@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
-use relay_server_common::{PeerIdentifier, ProtocolIdentifier};
+use relay_server_common::common::{NOT_A_PEER, STATE_NOT_INITIALIZED};
+use relay_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
 
 use relay_server_common::protocol::ProtocolDescriptor;
 
@@ -42,6 +43,10 @@ pub struct RelaySession {
     protocol: Arc<RwLock<ProtocolDescriptor>>,
 
     state: Arc<RwLock<RelaySessionState>>,
+
+    round: Arc<RwLock<u32>>,
+
+    broadcast_messages: Arc<RwLock<u32>>,
 }
 
 impl RelaySession {
@@ -152,6 +157,48 @@ impl RelaySession {
             )),
 
             state: Arc::new(RwLock::new(RelaySessionState::Empty)),
+
+            round: Arc::new(RwLock::new(0)),
+
+            broadcast_messages: Arc::new(RwLock::new(0)),
+        }
+    }
+
+    /// Check if this relay message sent from the given SocketAddr
+    /// and is valid to send to rest of the peers
+    pub fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
+        debug!("Checking if {:} can relay", msg.peer_number);
+        debug!("Server state: {:?}", self.state());
+        debug!("Turn of peer #: {:}", self.protocol().next());
+
+        match self.state() {
+            RelaySessionState::Initialized => {
+                debug!("Relay sessions state is initialized");
+            }
+            _ => {
+                debug!("Relay sessions state is not initialized");
+                return Err(STATE_NOT_INITIALIZED);
+            }
+        }
+        // validate the sender in the message (peer_number field) is the peer associated with this address
+        let sender = msg.peer_number;
+        let peer = self.get_peer_by_address(from);
+
+        // if peer is present and registered
+        if let Some(p) = peer {
+            return Ok(());
+        }
+        return Err(NOT_A_PEER);
+    }
+
+    /// get a copy of Peer that addr represents
+    pub fn get_peer_by_address(&self, addr: &SocketAddr) -> Option<Peer> {
+        match self.peers.read().unwrap().get(addr) {
+            Some(p) => match p.registered {
+                true => Some(p.clone()),
+                false => None,
+            },
+            None => None,
         }
     }
 
@@ -171,6 +218,20 @@ impl RelaySession {
 
     pub fn set_protocol(&self, protocol: ProtocolDescriptor) {
         *self.protocol.write().unwrap() = protocol;
+    }
+
+    pub fn get_broadcast_count(&self) -> u32 {
+        self.broadcast_messages.read().unwrap().clone()
+    }
+
+    pub fn increase_msg_count(&self) {
+        *self.broadcast_messages.write().unwrap() += 1;
+    }
+
+    pub fn increase_round(&self) {
+        *self.round.write().unwrap() += 1;
+        // Change the the number of messages to received back to 0
+        *self.broadcast_messages.write().unwrap() = 0;
     }
 }
 

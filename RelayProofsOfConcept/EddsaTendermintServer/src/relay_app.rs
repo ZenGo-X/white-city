@@ -26,6 +26,21 @@ fn convert_tx(bytes: &[u8]) -> String {
 }
 
 impl RelayApp {
+    fn can_relay(&self, client_message: &ClientMessage) -> u32 {
+        match client_message.msg_type() {
+            ClientMessageType::RelayMessage => {
+                let msg = client_message.clone().relay_message.unwrap();
+                let can_relay = self.relay_session.can_relay(&msg.from, &msg);
+                match can_relay {
+                    Ok(()) => debug!("Can relay this message"),
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+        0
+    }
+
     fn is_valid(&self, client_message: &ClientMessage) -> u32 {
         match client_message.msg_type() {
             ClientMessageType::Register => {
@@ -91,6 +106,17 @@ impl abci::Application for RelayApp {
                 // TODO: Currently using log and not data, data is expecting a different encoding,
                 // sigh
                 resp.set_log(serde_json::to_string(&server_msg).unwrap().to_owned());
+            }
+            ClientMessageType::RelayMessage => {
+                let relay_msg = client_message.clone().relay_message.unwrap();
+                let peer_id = relay_msg.peer_number;
+                let addr = relay_msg.from;
+                info!("Got relay message from {}", peer_id);
+                if self.can_relay(&client_message) == 0 {
+                    debug!("I can relay this")
+                }
+
+                //relay_session_inner.relay_message(&from, relay_msg);
             }
             _ => unimplemented!("This is not yet implemented"),
         }

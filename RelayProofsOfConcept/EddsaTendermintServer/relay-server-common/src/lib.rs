@@ -14,16 +14,17 @@ pub type MessagePayload = String;
 pub struct RelayMessage {
     pub peer_number: PeerIdentifier,
     pub protocol_id: ProtocolIdentifier,
-    //pub round: u32,
+    pub from: SocketAddr,
     pub to: Vec<PeerIdentifier>,
     pub message: MessagePayload,
 }
 
 impl RelayMessage {
-    pub fn new(peer_number: PeerIdentifier, protocol_id: ProtocolIdentifier) -> RelayMessage {
+    pub fn new(peer_number: PeerIdentifier, protocol_id: ProtocolIdentifier, from: SocketAddr) -> RelayMessage {
         RelayMessage {
             peer_number,
             protocol_id,
+            from,
             to: Vec::new(),
             message: String::from(""),
         }
