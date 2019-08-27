@@ -1,14 +1,11 @@
-use serde_json::{Error, Map, Value};
 use std::cell::RefCell;
 use std::env;
 use std::net::SocketAddr;
-use subtle_encoding::base64;
 
 use relay_server_common::{
-    ClientMessage, ClientToServerCodec, MessagePayload, PeerIdentifier, ProtocolIdentifier,
+    ClientMessage, MessagePayload, PeerIdentifier, ProtocolIdentifier,
     RelayMessage, ServerMessage, ServerMessageType, ServerResponse,
 };
-use tendermint::rpc::Client;
 
 use curv::elliptic::curves::ed25519::*;
 use curv::GE;
@@ -348,63 +345,6 @@ impl<T: Peer> State<T> {
             data_manager: data_m,
         }
     }
-
-    pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
-        let last_message = self.last_message.clone().into_inner();
-        let mut new_message = None;
-        let msg_type = msg.msg_type();
-        match msg_type {
-            ServerMessageType::Response => {
-                let next = self.handle_server_response(&msg);
-                match next {
-                    Ok(next_msg) => {
-                        new_message = Some(next_msg.clone());
-                    }
-                    Err(_) => {
-                        println!("Error in handle_server_response");
-                    }
-                }
-            }
-            ServerMessageType::RelayMessage => {
-                let next = self.handle_relay_message(msg.clone());
-                match next {
-                    Some(next_msg) => {
-                        //println!("next message to send is {:}", next_msg);
-                        new_message = Some(self.generate_relay_message(next_msg.clone()));
-                    }
-                    None => {
-                        println!("next item is None. Client is finished.");
-                        new_message = Some(ClientMessage::new());
-                    }
-                }
-            }
-            ServerMessageType::Abort => {
-                println!("Got abort message");
-                //Ok(MessageProcessResult::NoMessage)
-                new_message = Some(ClientMessage::new());
-            }
-            ServerMessageType::Undefined => {
-                new_message = Some(ClientMessage::new());
-                //panic!("Got undefined message: {:?}",msg);
-            }
-        };
-        if last_message.is_empty() {
-            match new_message {
-                Some(msg) => {
-                    self.last_message.replace(msg.clone());
-                    return Some(msg.clone());
-                }
-                None => return None,
-            }
-        } else {
-            let _new_message = new_message.clone().unwrap();
-            if !last_message.are_equal_payloads(&_new_message) {
-                println!("last message changed");
-                self.last_message.replace(_new_message.clone());
-            }
-            return Some(self.last_message.clone().into_inner());
-        }
-    }
 }
 
 impl<T: Peer> State<T> {
@@ -547,6 +487,19 @@ impl SessionClient {
         return server_response;
     }
 
+    pub fn send_message(&self, msg: ClientMessage) -> ServerMessage {
+        println!("Sending message {:?}", msg);
+        let tx =
+            tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
+        let response = self.client.broadcast_tx_commit(tx).unwrap();
+        let server_response = response.clone().deliver_tx.log.unwrap();
+        println!("ServerResponse {:?}", server_response);
+        let server_response: ServerMessage =
+            serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
+        return server_response;
+
+    }
+
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
         let last_message = self.state.last_message.clone().into_inner();
         let mut new_message = None;
@@ -630,5 +583,8 @@ fn main() {
         capacity,
     );
     let server_response = session.register(index, capacity);
-    session.generate_client_answer(server_response);
+    let next_message = session.generate_client_answer(server_response);
+    println!("Next message: {:?}", next_message);
+    // TODO The client/server response could be an error
+    let server_response = session.send_message(next_message.unwrap());
 }

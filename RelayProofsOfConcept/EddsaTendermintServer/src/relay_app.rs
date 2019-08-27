@@ -83,13 +83,14 @@ impl abci::Application for RelayApp {
         let client_message: ClientMessage = serde_json::from_slice(req.get_tx()).unwrap();
         info!("Value is {:?} In DeliverTx", client_message);
 
-        if self.is_valid(&client_message) != 0 {
-            resp.set_code(1);
-            return resp;
-        }
+        println!("Message type is {:?}", client_message.msg_type());
 
         match client_message.msg_type() {
             ClientMessageType::Register => {
+                if self.is_valid(&client_message) != 0 {
+                    resp.set_code(1);
+                    return resp;
+                }
                 let register = client_message.register.unwrap();
                 warn!(
                     "Got register message. protocol id requested: {}",
