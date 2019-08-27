@@ -60,6 +60,10 @@ impl RelayApp {
                     1
                 }
             }
+            ClientMessageType::RelayMessage => {
+                // TODO: Check validity of relay message here
+                0
+            }
             _ => unimplemented!("This is not yet implemented"),
         }
     }
@@ -116,7 +120,8 @@ impl abci::Application for RelayApp {
                 if self.can_relay(&client_message) == 0 {
                     debug!("I can relay this")
                 }
-
+                // TODO Insert code to advance a turn here
+                // TODO Store the values for each sender in a hash map
                 //relay_session_inner.relay_message(&from, relay_msg);
             }
             _ => unimplemented!("This is not yet implemented"),

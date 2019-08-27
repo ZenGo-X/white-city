@@ -47,5 +47,6 @@ path = "src/lib.rs"
 
 [dependencies.tendermint]
 version = "0.10.0"
-path="/home/amanusk/rust/tendermint-rs"
+git="https://github.com/amanusk/tendermint-rs"
+branch = "develop"
 features = ["rpc"]
