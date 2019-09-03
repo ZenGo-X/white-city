@@ -1,16 +1,16 @@
 **To Run 2p-EdDSA** 
 
-1. Run the server : `cargo run --package relay-server --bin server`
+This is a POC for running distributed multi-party signatures with Tendermint consensus as backed for message broadcast
 
-2. Run keygen: `cargo run --example eddsa_key_gen_client 127.0.0.1:8080 keys1` where keys1 is the party output keys
-you should take `apk` for the public key to generate to address from. pay attention to use `keys2` when you run the second instance 
-(you can choose different names instead of `keys1` and `keys2` )
+## Instructions
+You need to have tendermint installed.
+Follow the installation guide for your system at [tendermint github](https://github.com/tendermint/tendermint)
 
-3. Run signing: `cargo run --example eddsa_sign_client 127.0.0.1:8080 keys1 message`
-where `message` is the message to sign. Run another instance for the second party with `keys2`
+1. Run Tendermint node: `tendermint node` (To reset the state between runs, execute `tendermint unsafe_reset_all`)
 
-4. the output will be a file with (R,s). the file is called `signature`
+2. In a separate terminal window, run the application: `cargo run`
 
-Alternatively, run `./keygen.sh` for keygen and  `./sign.sh message` where `message` is the message to sign (see demo gif below)
+3. In yet another terminal window, run the key generation client `cargo run --example keygen-client -- -P 1`
 
-![demo](demo/2P-EdDSA%20demo.gif)
+TODO:
+Add explanation on deploying a cluster + Dockerfile to automate the process

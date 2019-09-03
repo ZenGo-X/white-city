@@ -3,8 +3,8 @@ use std::env;
 use std::net::SocketAddr;
 
 use relay_server_common::{
-    ClientMessage, MessagePayload, PeerIdentifier, ProtocolIdentifier,
-    RelayMessage, ServerMessage, ServerMessageType, ServerResponse,
+    ClientMessage, MessagePayload, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage,
+    ServerMessageType, ServerResponse,
 };
 
 use curv::elliptic::curves::ed25519::*;
@@ -295,6 +295,12 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
                 .short("P")
                 .long("capacity"),
         )
+        .arg(
+            Arg::with_name("filename")
+                .default_value("keys")
+                .long("filename")
+                .short("F"),
+        )
         .get_matches()
 }
 
@@ -348,9 +354,19 @@ impl<T: Peer> State<T> {
 }
 
 impl<T: Peer> State<T> {
-    fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload> {
+    // fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload> {
+    //     // parse relay message
+    //     let relay_msg = msg.relay_message.unwrap();
+    //     let from = relay_msg.peer_number;
+    //     if from == self.data_manager.peer_id.clone().into_inner() {
+    //         println!("-------self message accepted ------\n ");
+    //     }
+    //     let payload = relay_msg.message;
+    //     self.data_manager.get_next_message(from, payload)
+    // }
+
+    fn handle_relay_message(&mut self, relay_msg: RelayMessage) -> Option<MessagePayload> {
         // parse relay message
-        let relay_msg = msg.relay_message.unwrap();
         let from = relay_msg.peer_number;
         if from == self.data_manager.peer_id.clone().into_inner() {
             println!("-------self message accepted ------\n ");
@@ -487,17 +503,19 @@ impl SessionClient {
         return server_response;
     }
 
-    pub fn send_message(&self, msg: ClientMessage) -> ServerMessage {
+    pub fn send_message(&self, msg: ClientMessage) -> Vec<RelayMessage> {
         println!("Sending message {:?}", msg);
         let tx =
             tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
         let response = self.client.broadcast_tx_commit(tx).unwrap();
         let server_response = response.clone().deliver_tx.log.unwrap();
         println!("ServerResponse {:?}", server_response);
-        let server_response: ServerMessage =
+        let server_response: Vec<RelayMessage> =
             serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
         return server_response;
-
+    }
+    pub fn handle_relay_message(&mut self, msg: RelayMessage) {
+        self.state.handle_relay_message(msg.clone());
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
@@ -516,19 +534,22 @@ impl SessionClient {
                     }
                 }
             }
+            // TODO: better cases separation, this is a placeholder
             ServerMessageType::RelayMessage => {
-                let next = self.state.handle_relay_message(msg.clone());
-                match next {
-                    Some(next_msg) => {
-                        //println!("next message to send is {:}", next_msg);
-                        new_message = Some(self.state.generate_relay_message(next_msg.clone()));
-                    }
-                    None => {
-                        println!("next item is None. Client is finished.");
-                        new_message = Some(ClientMessage::new());
-                    }
-                }
+                new_message = Some(ClientMessage::new());
             }
+            //     let next = self.state.handle_relay_message(msg.clone());
+            //     match next {
+            //         Some(next_msg) => {
+            //             //println!("next message to send is {:}", next_msg);
+            //             new_message = Some(self.state.generate_relay_message(next_msg.clone()));
+            //         }
+            //         None => {
+            //             println!("next item is None. Client is finished.");
+            //             new_message = Some(ClientMessage::new());
+            //         }
+            //     }
+            // }
             ServerMessageType::Abort => {
                 println!("Got abort message");
                 //Ok(MessageProcessResult::NoMessage)
@@ -576,6 +597,12 @@ fn main() {
         .parse()
         .expect("Invalid number of participants");
 
+    let keys_filename: String = matches
+        .value_of("filename")
+        .unwrap()
+        .parse()
+        .expect("Invalid filename");
+
     let client_addr: SocketAddr = format!("127.0.0.1:808{}", index).parse().unwrap();
     let mut session = SessionClient::new(
         client_addr,
@@ -587,4 +614,8 @@ fn main() {
     println!("Next message: {:?}", next_message);
     // TODO The client/server response could be an error
     let server_response = session.send_message(next_message.unwrap());
+    println!("Server Response: {:?}", server_response);
+    for msg in server_response {
+        session.handle_relay_message(msg.clone());
+    }
 }

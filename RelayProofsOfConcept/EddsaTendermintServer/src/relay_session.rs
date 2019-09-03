@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 use relay_server_common::common::{NOT_A_PEER, STATE_NOT_INITIALIZED};
+use relay_server_common::{ClientMessage, ClientMessageType, StoredMessages};
 use relay_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
 
 use relay_server_common::protocol::ProtocolDescriptor;
@@ -46,7 +47,7 @@ pub struct RelaySession {
 
     round: Arc<RwLock<u32>>,
 
-    broadcast_messages: Arc<RwLock<u32>>,
+    stored_messages: Arc<RwLock<StoredMessages>>,
 }
 
 impl RelaySession {
@@ -160,7 +161,7 @@ impl RelaySession {
 
             round: Arc::new(RwLock::new(0)),
 
-            broadcast_messages: Arc::new(RwLock::new(0)),
+            stored_messages: Arc::new(RwLock::new(StoredMessages::new())),
         }
     }
 
@@ -220,18 +221,24 @@ impl RelaySession {
         *self.protocol.write().unwrap() = protocol;
     }
 
-    pub fn get_broadcast_count(&self) -> u32 {
-        self.broadcast_messages.read().unwrap().clone()
-    }
-
-    pub fn increase_msg_count(&self) {
-        *self.broadcast_messages.write().unwrap() += 1;
-    }
-
     pub fn increase_round(&self) {
         *self.round.write().unwrap() += 1;
         // Change the the number of messages to received back to 0
-        *self.broadcast_messages.write().unwrap() = 0;
+    }
+
+    pub fn round(&self) -> u32 {
+        self.round.read().unwrap().clone()
+    }
+
+    pub fn update_stored_messages(&mut self, round: u32, party: u32, msg: ClientMessage) {
+        self.stored_messages
+            .write()
+            .unwrap()
+            .update(round, party, msg);
+    }
+
+    pub fn stored_messages(&self) -> StoredMessages {
+        self.stored_messages.read().unwrap().clone()
     }
 }
 

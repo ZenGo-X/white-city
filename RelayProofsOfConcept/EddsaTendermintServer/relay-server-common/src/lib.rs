@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::vec::Vec;
 use tokio_jsoncodec::Codec as JsonCodec;
@@ -20,7 +21,11 @@ pub struct RelayMessage {
 }
 
 impl RelayMessage {
-    pub fn new(peer_number: PeerIdentifier, protocol_id: ProtocolIdentifier, from: SocketAddr) -> RelayMessage {
+    pub fn new(
+        peer_number: PeerIdentifier,
+        protocol_id: ProtocolIdentifier,
+        from: SocketAddr,
+    ) -> RelayMessage {
         RelayMessage {
             peer_number,
             protocol_id,
@@ -119,6 +124,29 @@ impl ServerMessage {
 }
 
 #[derive(Default, Debug, Deserialize, Serialize, Clone)]
+pub struct StoredMessages {
+    pub messages: HashMap<u32, HashMap<u32, ClientMessage>>,
+}
+
+impl StoredMessages {
+    pub fn new() -> StoredMessages {
+        StoredMessages {
+            messages: HashMap::new(),
+        }
+    }
+
+    pub fn update(&mut self, round: u32, party: u32, msg: ClientMessage) {
+        self.messages.entry(round).or_insert(HashMap::new());
+        match self.messages.get_mut(&round) {
+            Some(messages) => {
+                messages.insert(party, msg.clone());
+            }
+            _ => (),
+        }
+    }
+}
+
+#[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub struct ClientMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub register: Option<RegisterMessage>,
@@ -197,3 +225,17 @@ struct RegisterResponse {
 // in: clientMessage out:serverMessage
 pub type ServerToClientCodec = JsonCodec<ClientMessage, ServerMessage>;
 pub type ClientToServerCodec = JsonCodec<ServerMessage, ClientMessage>;
+
+#[cfg(test)]
+mod tests {
+    use super::ClientMessage;
+    use super::StoredMessages;
+
+    #[test]
+    fn test_stored_messages() {
+        let mut stored_messages = StoredMessages::new();
+        stored_messages.update(1, 3, ClientMessage::new());
+        stored_messages.update(1, 2, ClientMessage::new());
+        println!("{:?}", stored_messages);
+    }
+}
