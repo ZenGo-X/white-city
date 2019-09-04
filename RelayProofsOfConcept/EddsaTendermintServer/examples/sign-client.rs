@@ -633,17 +633,6 @@ impl<T: Peer> State<T> {
 }
 
 impl<T: Peer> State<T> {
-    // fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload> {
-    //     // parse relay message
-    //     let relay_msg = msg.relay_message.unwrap();
-    //     let from = relay_msg.peer_number;
-    //     if from == self.data_manager.peer_id.clone().into_inner() {
-    //         println!("-------self message accepted ------\n ");
-    //     }
-    //     let payload = relay_msg.message;
-    //     self.data_manager.get_next_message(from, payload)
-    // }
-
     fn handle_relay_message(&mut self, relay_msg: RelayMessage) -> Option<MessagePayload> {
         // parse relay message
         let from = relay_msg.peer_number;
@@ -804,8 +793,21 @@ impl SessionClient {
             serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
         return server_response;
     }
-    pub fn handle_relay_message(&mut self, msg: RelayMessage) {
-        self.state.handle_relay_message(msg.clone());
+    pub fn handle_relay_message(&mut self, msg: RelayMessage) -> Option<ClientMessage> {
+        let mut new_message = Some(ClientMessage::new());
+        let next = self.state.handle_relay_message(msg.clone());
+        println!("Next {:?}", next);
+        match next {
+            Some(next_msg) => {
+                println!("next message to send is {:}", next_msg);
+                new_message = Some(self.state.generate_relay_message(next_msg.clone()));
+            }
+            None => {
+                println!("next item is None. Client is finished.");
+                new_message = Some(ClientMessage::new());
+            }
+        }
+        new_message
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
@@ -909,26 +911,45 @@ fn main() {
         message_to_sign,
     );
     let server_response = session.register(index, capacity);
-    let next_message = session.generate_client_answer(server_response);
+    let mut next_message = session.generate_client_answer(server_response);
     println!("Next message: {:?}", next_message);
     // TODO The client/server response could be an error
-    let server_response = session.send_message(next_message.unwrap());
+    let mut server_response = session.send_message(next_message.unwrap());
     println!("Server Response: {:?}", server_response);
-    //session.query();
+    // TODO: as many steps as there are in the protocol
+    if server_response.len() == capacity as usize {
+        for msg in server_response.clone() {
+            next_message = session.handle_relay_message(msg.clone());
+            server_response = session.send_message(next_message.unwrap());
+        }
+    }
+    if server_response.len() == capacity as usize {
+        for msg in server_response.clone() {
+            next_message = session.handle_relay_message(msg.clone());
+            server_response = session.send_message(next_message.unwrap());
+        }
+    }
+    if server_response.len() == capacity as usize {
+        for msg in server_response.clone() {
+            next_message = session.handle_relay_message(msg.clone());
+            server_response = session.send_message(next_message.unwrap());
+        }
+    }
     if server_response.len() == capacity as usize {
         for msg in server_response {
             session.handle_relay_message(msg.clone());
         }
-    } else {
-        loop {
-            let server_response = session.query();
-            thread::sleep(time::Duration::from_millis(100));
-            if server_response.len() == capacity as usize {
-                for msg in server_response {
-                    session.handle_relay_message(msg.clone());
-                }
-                return;
-            }
-        }
     }
+    //} else {
+    //    loop {
+    //        let server_response = session.query();
+    //        thread::sleep(time::Duration::from_millis(100));
+    //        if server_response.len() == capacity as usize {
+    //            for msg in server_response {
+    //                session.handle_relay_message(msg.clone());
+    //            }
+    //            return;
+    //        }
+    //    }
+    //}
 }
