@@ -497,7 +497,8 @@ impl SessionClient {
 
     pub fn register(&mut self, index: u32, capacity: u32) -> ServerMessage {
         let mut msg = ClientMessage::new();
-        let client_addr: SocketAddr = format!("127.0.0.1:808{}", index).parse().unwrap();
+        let index = 20 + index;
+        let client_addr: SocketAddr = format!("127.0.0.1:80{}", index).parse().unwrap();
         msg.register(client_addr, 0, capacity);
 
         println!("Regsiter message {:?}", msg);
@@ -615,7 +616,8 @@ fn main() {
         .parse()
         .expect("Invalid filename");
 
-    let client_addr: SocketAddr = format!("127.0.0.1:808{}", index).parse().unwrap();
+    let index = 20 + index;
+    let client_addr: SocketAddr = format!("127.0.0.1:80{}", index).parse().unwrap();
     let mut session = SessionClient::new(
         client_addr,
         &"tcp://127.0.0.1:26657".parse().unwrap(),
@@ -635,7 +637,7 @@ fn main() {
     } else {
         loop {
             let server_response = session.query();
-            thread::sleep(time::Duration::from_millis(500));
+            thread::sleep(time::Duration::from_millis(100));
             if server_response.len() == capacity as usize {
                 for msg in server_response {
                     session.handle_relay_message(msg.clone());

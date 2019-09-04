@@ -6,7 +6,9 @@ This is a POC for running distributed multi-party signatures with Tendermint con
 You need to have tendermint installed.
 Follow the installation guide for your system at [tendermint github](https://github.com/tendermint/tendermint)
 
-1. Run Tendermint node: `tendermint node` (To reset the state between runs, execute `tendermint unsafe_reset_all`)
+0. Reset tendermint state with `tendermint unsafe_reset_all`
+
+1. Run Tendermint node: `tendermint node`
 
 2. In a separate terminal window, run the application: `cargo run`
 
