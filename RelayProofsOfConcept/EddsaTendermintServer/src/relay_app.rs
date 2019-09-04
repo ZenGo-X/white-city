@@ -139,6 +139,7 @@ impl abci::Application for RelayApp {
                     response_vec.push(relay_msg.clone());
                 }
                 resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
+                println!("Response log {:?}", resp.log);
 
                 if stored_messages
                     .messages
@@ -164,15 +165,28 @@ impl abci::Application for RelayApp {
 
         let c = convert_tx(&req.data);
         info!("Received {:?} In Query", c);
-        let client_message: ClientMessage = serde_json::from_slice(&req.data).unwrap();
-        info!("Value is {:?} In Query", client_message);
+
+        // TODO: Error handle
+        let requested_stage = c.parse::<u32>().unwrap();
+
+        let stored_messages = self.relay_session.stored_messages();
+        let mut response_vec = Vec::new();
+
+        println!("All messages {:?}", stored_messages);
+        let this_round_messages = stored_messages.messages.get(&requested_stage).unwrap();
+
+        for (_client_idx, msg) in this_round_messages.into_iter() {
+            let relay_msg = msg.relay_message.as_ref().unwrap().clone();
+            println!("Setting message {:?}", relay_msg);
+            response_vec.push(relay_msg.clone());
+        }
+        // resp.set_log("Some string".to_owned());
+        resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
+        println!("Response log {:?}", resp.log);
 
         resp.set_code(0);
-        info!("Code is {}", resp.get_code());
-        resp.set_log(String::from("Exists"));
         resp.set_index(-1);
         resp.set_height(1_i64);
-        resp.set_codespace(String::from("Bla"));
         resp
     }
 }

@@ -3,7 +3,7 @@
     {
       "id": 0,
       "names": ["test-protocol"],
-      "capacities": [1, 2]
+      "capacities": [1, 2, 3, 5]
     },
     {
       "id": 1,

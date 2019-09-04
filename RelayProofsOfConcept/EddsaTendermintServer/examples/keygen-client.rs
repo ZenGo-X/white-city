@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::env;
 use std::net::SocketAddr;
+use std::{thread, time};
 
 use relay_server_common::{
     ClientMessage, MessagePayload, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage,
@@ -201,7 +202,7 @@ impl Peer for EddsaPeer {
 
         let keygen_json = serde_json::to_string(&(key, apk, index)).unwrap();
 
-        let res = fs::write(env::args().nth(2).unwrap(), keygen_json);
+        let res = fs::write(format!("keys{}", env::args().nth(2).unwrap()), keygen_json);
         match res {
             Ok(_) => Ok(()),
             Err(_) => Err("Failed to verify"),
@@ -483,6 +484,17 @@ pub enum MessageProcessResult {
 }
 
 impl SessionClient {
+    pub fn query(&self) -> Vec<RelayMessage> {
+        let tx = "0";
+        let response = self.client.abci_query(None, tx, None, false).unwrap();
+        println!("RawResponse: {:?}", response);
+        let server_response = response.log;
+        println!("ServerResponseLog {:?}", server_response);
+        let server_response: Vec<RelayMessage> =
+            serde_json::from_str(&server_response.to_string()).unwrap();
+        return server_response;
+    }
+
     pub fn register(&mut self, index: u32, capacity: u32) -> ServerMessage {
         let mut msg = ClientMessage::new();
         let client_addr: SocketAddr = format!("127.0.0.1:808{}", index).parse().unwrap();
@@ -615,7 +627,21 @@ fn main() {
     // TODO The client/server response could be an error
     let server_response = session.send_message(next_message.unwrap());
     println!("Server Response: {:?}", server_response);
-    for msg in server_response {
-        session.handle_relay_message(msg.clone());
+    //session.query();
+    if server_response.len() == capacity as usize {
+        for msg in server_response {
+            session.handle_relay_message(msg.clone());
+        }
+    } else {
+        loop {
+            let server_response = session.query();
+            thread::sleep(time::Duration::from_millis(500));
+            if server_response.len() == capacity as usize {
+                for msg in server_response {
+                    session.handle_relay_message(msg.clone());
+                }
+                return;
+            }
+        }
     }
 }
