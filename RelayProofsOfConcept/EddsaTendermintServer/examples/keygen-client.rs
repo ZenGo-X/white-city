@@ -1,3 +1,4 @@
+use log::{debug, error, info, warn};
 use std::cell::RefCell;
 use std::env;
 use std::net::SocketAddr;
@@ -58,7 +59,7 @@ impl EddsaPeer {
         self.pks.insert(peer_id, pk);
     }
     fn aggregate_pks(&mut self) -> KeyAgg {
-        println!("aggregating pks");
+        debug!("aggregating pks");
         let _cap = self.capacity as usize;
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for index in 0..self.capacity {
@@ -66,7 +67,7 @@ impl EddsaPeer {
             let pk = self.pks.get_mut(&peer).unwrap();
             pks.push(pk.clone());
         }
-        println!("# of public keys : {:?}", pks.len());
+        debug!("# of public keys : {:?}", pks.len());
         let peer_id = self.peer_id.clone().into_inner();
         let index = (peer_id - 1) as usize;
         let agg_key = KeyPair::key_aggregation_n(&pks, &index);
@@ -86,7 +87,7 @@ impl EddsaPeer {
                 }
                 let s_slice: &str = &pk[..]; // take a full slice of the string
                 let _pk = serde_json::from_str(s_slice);
-                println!("-------Got peer # {:} pk! {:?}", from, pk);
+                info!("-------Got peer # {:} pk! {:?}", from, pk);
                 match _pk {
                     Ok(_pk) => self.add_pk(from, _pk),
                     Err(_) => panic!("Could not serialize public key"),
@@ -166,20 +167,20 @@ impl Peer for EddsaPeer {
     }
 
     fn do_step(&mut self) {
-        println!("Current step is: {:}", self.current_step);
+        debug!("Current step is: {:}", self.current_step);
         if self.is_step_done() {
             // do the next step
-            println!("step {:} done!", self.current_step);
+            debug!("step {:} done!", self.current_step);
             self.current_step += 1;
             match self.current_step {
                 1 => {
-                    println!("----------\nDone.\n----------");
+                    info!("----------\nDone.\n----------");
                     self.is_done = true;
                 }
                 _ => panic!("Unsupported step"),
             }
         } else {
-            println!("step not done");
+            debug!("step not done");
         }
     }
 
@@ -220,7 +221,7 @@ impl Peer for EddsaPeer {
     fn get_next_item(&mut self) -> Option<MessagePayload> {
         //println!("current_step: {:}, pk_accepted: {:} commitment_accepted: {:} r_accepted: {:} sig_accepted: {:}",self.current_step,self.pk_accepted,self.commitment_accepted, self.r_accepted, self.sig_accepted);
         if self.current_step == 0 || !self.pk_accepted {
-            println!("next item is pk: {:?}", self.pk_msg);
+            debug!("next item is pk: {:?}", self.pk_msg);
             return self.pk_msg.clone();
         }
         None
@@ -360,7 +361,7 @@ impl<T: Peer> State<T> {
     //     let relay_msg = msg.relay_message.unwrap();
     //     let from = relay_msg.peer_number;
     //     if from == self.data_manager.peer_id.clone().into_inner() {
-    //         println!("-------self message accepted ------\n ");
+    //         debug!("-------self message accepted ------\n ");
     //     }
     //     let payload = relay_msg.message;
     //     self.data_manager.get_next_message(from, payload)
@@ -370,7 +371,7 @@ impl<T: Peer> State<T> {
         // parse relay message
         let from = relay_msg.peer_number;
         if from == self.data_manager.peer_id.clone().into_inner() {
-            println!("-------self message accepted ------\n ");
+            debug!("-------self message accepted ------\n ");
         }
         let payload = relay_msg.message;
         self.data_manager.get_next_message(from, payload)
@@ -394,7 +395,7 @@ impl<T: Peer> State<T> {
     }
 
     fn handle_register_response(&mut self, peer_id: PeerIdentifier) -> Result<ClientMessage, ()> {
-        println!("Peer identifier: {}", peer_id);
+        info!("Peer identifier: {}", peer_id);
         // Set the session parameters
         let message = self
             .data_manager
@@ -422,7 +423,7 @@ impl<T: Peer> State<T> {
                 }
             }
             not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
-                println!("Not initialized, sending again");
+                debug!("Not initialized, sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(_) => {
@@ -435,7 +436,7 @@ impl<T: Peer> State<T> {
                 }
             }
             _ => {
-                println!("didn't handle error correctly");
+                warn!("didn't handle error correctly");
                 return Err("error response handling failed");
             }
         }
@@ -451,23 +452,22 @@ impl<T: Peer> State<T> {
                 let client_message = self.handle_register_response(peer_id);
                 match client_message {
                     Ok(_msg) => {
-                        println!("sending peers first message: {:#?}", _msg);
+                        debug!("sending peers first message: {:#?}", _msg);
                         return Ok(_msg.clone());
                     }
                     Err(_) => {
-                        println!("error occured");
+                        error!("error occured");
                         return Ok(ClientMessage::new());
                     }
                 }
             }
             ServerResponse::ErrorResponse(err_msg) => {
-                //  println!("got error response");
                 let err_msg_slice: &str = &err_msg[..];
                 let msg = self.handle_error_response(err_msg_slice);
                 match msg {
                     Ok(_msg) => return Ok(_msg),
                     Err(_) => {
-                        println!("error occured");
+                        error!("error occured");
                         return Ok(ClientMessage::new());
                     }
                 }
@@ -487,9 +487,9 @@ impl SessionClient {
     pub fn query(&self) -> Vec<RelayMessage> {
         let tx = "0";
         let response = self.client.abci_query(None, tx, None, false).unwrap();
-        println!("RawResponse: {:?}", response);
+        debug!("RawResponse: {:?}", response);
         let server_response = response.log;
-        println!("ServerResponseLog {:?}", server_response);
+        debug!("ServerResponseLog {:?}", server_response);
         let server_response: Vec<RelayMessage> =
             serde_json::from_str(&server_response.to_string()).unwrap();
         return server_response;
@@ -501,28 +501,28 @@ impl SessionClient {
         let client_addr: SocketAddr = format!("127.0.0.1:80{}", index).parse().unwrap();
         msg.register(client_addr, 0, capacity);
 
-        println!("Regsiter message {:?}", msg);
+        debug!("Regsiter message {:?}", msg);
         let tx =
             tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
         let response = self.client.broadcast_tx_commit(tx).unwrap();
         let server_response = response.clone().deliver_tx.log.unwrap();
-        println!("Registered OK");
-        println!("ServerResponse {:?}", server_response);
+        info!("Registered OK");
+        debug!("ServerResponse {:?}", server_response);
         let server_response: ServerMessage =
             serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
-        println!("ServerResponse {:?}", server_response);
+        debug!("ServerResponse {:?}", server_response);
         // TODO Add Error checks etc
         self.state.registered = true;
         return server_response;
     }
 
     pub fn send_message(&self, msg: ClientMessage) -> Vec<RelayMessage> {
-        println!("Sending message {:?}", msg);
+        debug!("Sending message {:?}", msg);
         let tx =
             tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
         let response = self.client.broadcast_tx_commit(tx).unwrap();
         let server_response = response.clone().deliver_tx.log.unwrap();
-        println!("ServerResponse {:?}", server_response);
+        debug!("ServerResponse {:?}", server_response);
         let server_response: Vec<RelayMessage> =
             serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
         return server_response;
@@ -543,7 +543,7 @@ impl SessionClient {
                         new_message = Some(next_msg.clone());
                     }
                     Err(_) => {
-                        println!("Error in handle_server_response");
+                        error!("Error in handle_server_response");
                     }
                 }
             }
@@ -554,17 +554,17 @@ impl SessionClient {
             //     let next = self.state.handle_relay_message(msg.clone());
             //     match next {
             //         Some(next_msg) => {
-            //             //println!("next message to send is {:}", next_msg);
+            //             //debug!("next message to send is {:}", next_msg);
             //             new_message = Some(self.state.generate_relay_message(next_msg.clone()));
             //         }
             //         None => {
-            //             println!("next item is None. Client is finished.");
+            //             debug!("next item is None. Client is finished.");
             //             new_message = Some(ClientMessage::new());
             //         }
             //     }
             // }
             ServerMessageType::Abort => {
-                println!("Got abort message");
+                info!("Got abort message");
                 //Ok(MessageProcessResult::NoMessage)
                 new_message = Some(ClientMessage::new());
             }
@@ -625,10 +625,10 @@ fn main() {
     );
     let server_response = session.register(index, capacity);
     let next_message = session.generate_client_answer(server_response);
-    println!("Next message: {:?}", next_message);
+    debug!("Next message: {:?}", next_message);
     // TODO The client/server response could be an error
     let server_response = session.send_message(next_message.unwrap());
-    println!("Server Response: {:?}", server_response);
+    debug!("Server Response: {:?}", server_response);
     //session.query();
     if server_response.len() == capacity as usize {
         for msg in server_response {

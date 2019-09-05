@@ -87,7 +87,7 @@ impl abci::Application for RelayApp {
         let client_message: ClientMessage = serde_json::from_slice(req.get_tx()).unwrap();
         info!("Value is {:?} In DeliverTx", client_message);
 
-        println!("Message type is {:?}", client_message.msg_type());
+        debug!("Message type is {:?}", client_message.msg_type());
 
         match client_message.msg_type() {
             ClientMessageType::Register => {
@@ -139,7 +139,7 @@ impl abci::Application for RelayApp {
                     response_vec.push(relay_msg.clone());
                 }
                 resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
-                println!("Response log {:?}", resp.log);
+                debug!("Response log {:?}", resp.log);
 
                 if stored_messages
                     .messages
@@ -151,7 +151,7 @@ impl abci::Application for RelayApp {
                 {
                     // If received a message from each party, increase round
                     // TODO: sort efficency
-                    self.relay_session.increase_round();
+                    self.relay_session.increase_step();
                 }
             }
             _ => unimplemented!("This is not yet implemented"),
@@ -172,17 +172,17 @@ impl abci::Application for RelayApp {
         let stored_messages = self.relay_session.stored_messages();
         let mut response_vec = Vec::new();
 
-        println!("All messages {:?}", stored_messages);
+        debug!("All messages {:?}", stored_messages);
         let this_round_messages = stored_messages.messages.get(&requested_stage).unwrap();
 
         for (_client_idx, msg) in this_round_messages.into_iter() {
             let relay_msg = msg.relay_message.as_ref().unwrap().clone();
-            println!("Setting message {:?}", relay_msg);
+            debug!("Setting message {:?}", relay_msg);
             response_vec.push(relay_msg.clone());
         }
         // resp.set_log("Some string".to_owned());
         resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
-        println!("Response log {:?}", resp.log);
+        debug!("Response log {:?}", resp.log);
 
         resp.set_code(0);
         resp.set_index(-1);

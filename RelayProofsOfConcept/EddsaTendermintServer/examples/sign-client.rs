@@ -397,6 +397,10 @@ impl Peer for EddsaPeer {
         return self.pk_msg.clone();
     }
 
+    fn current_step(&self) -> u32 {
+        self.current_step
+    }
+
     fn do_step(&mut self) {
         println!("Current step is: {:}", self.current_step);
         if self.is_step_done() {
@@ -504,12 +508,12 @@ pub trait Peer {
     fn get_next_item(&mut self) -> Option<MessagePayload>;
     fn finalize(&mut self) -> Result<(), &'static str>;
     fn is_done(&mut self) -> bool;
+    fn current_step(&self) -> u32;
 }
 
 struct ProtocolDataManager<T: Peer> {
     pub peer_id: PeerIdentifier,
     pub capacity: u32,
-    pub current_step: u32,
     pub data_holder: T, // will be filled when initializing, and on each new step
     pub client_data: Option<MessagePayload>, // new data calculated by this peer at the beginning of a step (that needs to be sent to other peers)
     pub new_client_data: bool,
@@ -522,7 +526,6 @@ impl<T: Peer> ProtocolDataManager<T> {
     {
         ProtocolDataManager {
             peer_id: 0,
-            current_step: 0,
             capacity,
             data_holder: Peer::new(capacity, message),
             client_data: None,
@@ -751,8 +754,12 @@ pub enum MessageProcessResult {
 
 impl SessionClient {
     pub fn query(&self) -> Vec<RelayMessage> {
-        let tx = "0";
-        let response = self.client.abci_query(None, tx, None, false).unwrap();
+        let tx = self.state.data_manager.data_holder.current_step();
+        println!("Requesting messages for step {:?}", tx);
+        let response = self
+            .client
+            .abci_query(None, tx.to_string(), None, false)
+            .unwrap();
         println!("RawResponse: {:?}", response);
         let server_response = response.log;
         println!("ServerResponseLog {:?}", server_response);
@@ -914,42 +921,44 @@ fn main() {
     let mut next_message = session.generate_client_answer(server_response);
     println!("Next message: {:?}", next_message);
     // TODO The client/server response could be an error
-    let mut server_response = session.send_message(next_message.unwrap());
+    let mut server_response = session.send_message(next_message.clone().unwrap());
     println!("Server Response: {:?}", server_response);
     // TODO: as many steps as there are in the protocol
+    'outer: for _ in 0..3 {
+        if server_response.len() == capacity as usize {
+            for msg in server_response.clone() {
+                next_message = session.handle_relay_message(msg.clone());
+            }
+            server_response = session.send_message(next_message.clone().unwrap());
+        } else {
+            'inner: loop {
+                server_response = session.query();
+                thread::sleep(time::Duration::from_millis(500));
+                if server_response.len() == capacity as usize {
+                    for msg in server_response.clone() {
+                        next_message = session.handle_relay_message(msg.clone());
+                    }
+                    server_response = session.send_message(next_message.clone().unwrap());
+                    break 'inner;
+                }
+            }
+        }
+    }
+    // For the last iteration, no need to send server messages again
     if server_response.len() == capacity as usize {
         for msg in server_response.clone() {
             next_message = session.handle_relay_message(msg.clone());
-            server_response = session.send_message(next_message.unwrap());
+        }
+    } else {
+        'inner: loop {
+            server_response = session.query();
+            thread::sleep(time::Duration::from_millis(500));
+            if server_response.len() == capacity as usize {
+                for msg in server_response.clone() {
+                    next_message = session.handle_relay_message(msg.clone());
+                }
+                break 'inner;
+            }
         }
     }
-    if server_response.len() == capacity as usize {
-        for msg in server_response.clone() {
-            next_message = session.handle_relay_message(msg.clone());
-            server_response = session.send_message(next_message.unwrap());
-        }
-    }
-    if server_response.len() == capacity as usize {
-        for msg in server_response.clone() {
-            next_message = session.handle_relay_message(msg.clone());
-            server_response = session.send_message(next_message.unwrap());
-        }
-    }
-    if server_response.len() == capacity as usize {
-        for msg in server_response {
-            session.handle_relay_message(msg.clone());
-        }
-    }
-    //} else {
-    //    loop {
-    //        let server_response = session.query();
-    //        thread::sleep(time::Duration::from_millis(100));
-    //        if server_response.len() == capacity as usize {
-    //            for msg in server_response {
-    //                session.handle_relay_message(msg.clone());
-    //            }
-    //            return;
-    //        }
-    //    }
-    //}
 }

@@ -221,7 +221,7 @@ impl RelaySession {
         *self.protocol.write().unwrap() = protocol;
     }
 
-    pub fn increase_round(&self) {
+    pub fn increase_step(&self) {
         *self.round.write().unwrap() += 1;
         // Change the the number of messages to received back to 0
     }
