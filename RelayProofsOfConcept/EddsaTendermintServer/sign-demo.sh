@@ -3,13 +3,14 @@ echo "$0: MP-EDDSA"
 
 rm signature?
 rm signature??
+rm log*.log
 
 #kill -9 $(lsof -t -i:26657) &&
 # kill -9 $(lsof -t -i:26658) &&
 #tendermint unsafe_reset_all &&
 #nohup tendermint node &> /dev/null &
 
-n=20
+n=50
 
 echo "sign part"
 #cargo run --package relay-server --bin server -- -P $n&
@@ -17,6 +18,7 @@ echo "sign part"
 for i in $(seq 1 $n);
 do
     cargo run --example sign-client -- -I $i -P $n &> log$i.log &
+    #sleep 0.1
 done
 
 # kill -9 $(lsof -t -i:26657) && kill -9 $(lsof -t -i:26658)

@@ -120,13 +120,16 @@ impl EddsaPeer {
         println!("# of public keys : {:?}", pks.len());
         let peer_id = self.peer_id;
         let index = (peer_id - 1) as usize;
-        let agg_key = if self.kg_index == peer_id {
-            KeyPair::key_aggregation_n(&pks, &index)
-        } else {
-            pks.reverse();
-            KeyPair::key_aggregation_n(&pks, &(1 - index))
-        };
-        return agg_key;
+        println!("Public keys {:?}", &pks);
+        println!("KG index:{}, SIG index:{}", self.kg_index, peer_id);
+        KeyPair::key_aggregation_n(&pks, &index)
+        // let agg_key = if self.kg_index == peer_id {
+        //KeyPair::key_aggregation_n(&pks, &index)
+        // } else {
+        //     pks.reverse();
+        //     KeyPair::key_aggregation_n(&pks, &(1 - index))
+        // };
+        // return agg_key;
     }
 
     fn validate_commitments(&mut self) -> bool {
