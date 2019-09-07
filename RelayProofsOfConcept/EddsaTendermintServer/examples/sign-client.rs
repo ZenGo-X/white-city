@@ -578,6 +578,12 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
                 .long("filename")
                 .short("F"),
         )
+        .arg(
+            Arg::with_name("message")
+                .default_value("message")
+                .long("message")
+                .short("M"),
+        )
         .get_matches()
 }
 
@@ -905,7 +911,11 @@ fn main() {
         .parse()
         .expect("Invalid filename");
 
-    let message: String = "message".to_owned();
+    let message: String = matches
+        .value_of("message")
+        .unwrap()
+        .parse()
+        .expect("Invalid message to sign");
 
     let message_to_sign = match hex::decode(message.to_owned()) {
         Ok(x) => x,
