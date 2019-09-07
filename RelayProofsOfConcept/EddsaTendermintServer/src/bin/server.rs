@@ -18,7 +18,10 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
     App::new("relay-server")
         .arg(
             Arg::with_name("address")
-                .default_value("127.0.0.1:8080")
+                // Default tendermint port
+                .long("address")
+                .short("A")
+                .default_value("127.0.0.1:26658")
                 .value_name("<HOST:PORT>"),
         )
         .arg(
@@ -113,5 +116,5 @@ fn main() {
 
     setup_logging(verbosity).expect("failed to initialize logging.");
 
-    abci::run_local(RelayApp::new(capacity));
+    abci::run(addr, RelayApp::new(capacity));
 }

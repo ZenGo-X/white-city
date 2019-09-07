@@ -107,14 +107,8 @@ impl EddsaPeer {
         let index = (peer_id - 1) as usize;
         println!("Public keys {:?}", &pks);
         println!("KG index:{}, SIG index:{}", self.kg_index, peer_id);
+        // TODO: sort the pks according to key-gen indexes when applying
         KeyPair::key_aggregation_n(&pks, &index)
-        // let agg_key = if self.kg_index == peer_id {
-        //KeyPair::key_aggregation_n(&pks, &index)
-        // } else {
-        //     pks.reverse();
-        //     KeyPair::key_aggregation_n(&pks, &(1 - index))
-        // };
-        // return agg_key;
     }
 
     fn validate_commitments(&mut self) -> bool {
@@ -441,6 +435,16 @@ impl Peer for EddsaPeer {
         let signature = Signature::add_signature_parts(s);
         // verify message with signature
         let apk = self.aggregate_pks();
+
+        let data = fs::read_to_string(format!("keys{}", self.peer_id))
+            .expect("Unable to load keys, did you run keygen first? ");
+        let (_key, orig_apk, _kg_index): (KeyPair, KeyAgg, u32) =
+            serde_json::from_str(&data).unwrap();
+
+        println!("Aggregated pk {:?}", apk);
+        println!("Orig pk {:?}", orig_apk);
+        println!("Equal hash? {:?}", apk.hash == orig_apk.hash);
+        println!("Equal? {:?}", apk.apk == orig_apk.apk);
 
         match verify(&signature, &self.message[..], &apk.apk) {
             Ok(_) => {
@@ -798,6 +802,7 @@ impl SessionClient {
             serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
         return server_response;
     }
+
     pub fn handle_relay_message(&mut self, msg: RelayMessage) -> Option<ClientMessage> {
         let mut new_message = Some(ClientMessage::new());
         let next = self.state.handle_relay_message(msg.clone());
@@ -816,7 +821,6 @@ impl SessionClient {
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
-        let last_message = self.state.last_message.clone().into_inner();
         let mut new_message = None;
         let msg_type = msg.msg_type();
         match msg_type {
@@ -893,12 +897,6 @@ fn main() {
         .unwrap()
         .parse()
         .expect("Invalid number of participants");
-
-    let keys_filename: String = matches
-        .value_of("filename")
-        .unwrap()
-        .parse()
-        .expect("Invalid filename");
 
     let message: String = matches
         .value_of("message")
