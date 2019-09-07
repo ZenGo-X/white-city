@@ -1,6 +1,4 @@
 use log::{debug, error, info, warn};
-use std::cell::RefCell;
-use std::env;
 use std::net::SocketAddr;
 use std::{thread, time};
 
@@ -21,7 +19,7 @@ use clap::{App, Arg, ArgMatches};
 #[allow(non_snake_case)]
 struct EddsaPeer {
     // this peers identifier in this session
-    pub peer_id: RefCell<PeerIdentifier>,
+    pub peer_id: PeerIdentifier,
     // # of participants
     pub capacity: u32,
 
@@ -68,7 +66,7 @@ impl EddsaPeer {
             pks.push(pk.clone());
         }
         debug!("# of public keys : {:?}", pks.len());
-        let peer_id = self.peer_id.clone().into_inner();
+        let peer_id = self.peer_id;
         let index = (peer_id - 1) as usize;
         let agg_key = KeyPair::key_aggregation_n(&pks, &index);
         return agg_key;
@@ -81,7 +79,7 @@ impl EddsaPeer {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::PublicKey(pk) => {
-                let peer_id = self.peer_id.clone().into_inner();
+                let peer_id = self.peer_id;
                 if from == peer_id {
                     self.pk_accepted = true;
                 }
@@ -138,7 +136,7 @@ impl Peer for EddsaPeer {
             r_s: HashMap::new(),
             sigs: HashMap::new(),
             capacity,
-            peer_id: RefCell::new(0),
+            peer_id: 0,
             agg_key: None,
             current_step: 0,
             R_tot: None,
@@ -157,7 +155,7 @@ impl Peer for EddsaPeer {
     }
 
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
-        self.peer_id.replace(peer_id);
+        self.peer_id = peer_id;
         let pk = self.client_key.public_key.clone();
 
         let pk_s = serde_json::to_string(&pk).expect("Failed in serialization");
@@ -203,7 +201,7 @@ impl Peer for EddsaPeer {
 
         let keygen_json = serde_json::to_string(&(key, apk, index)).unwrap();
 
-        let res = fs::write(format!("keys{}", env::args().nth(2).unwrap()), keygen_json);
+        let res = fs::write(format!("keys{}", self.peer_id), keygen_json);
         match res {
             Ok(_) => Ok(()),
             Err(_) => Err("Failed to verify"),
@@ -238,7 +236,7 @@ pub trait Peer {
 }
 
 struct ProtocolDataManager<T: Peer> {
-    pub peer_id: RefCell<PeerIdentifier>,
+    pub peer_id: PeerIdentifier,
     pub capacity: u32,
     pub current_step: u32,
     pub data_holder: T, // will be filled when initializing, and on each new step
@@ -252,7 +250,7 @@ impl<T: Peer> ProtocolDataManager<T> {
         T: Peer,
     {
         ProtocolDataManager {
-            peer_id: RefCell::new(0),
+            peer_id: 0,
             current_step: 0,
             capacity,
             data_holder: Peer::new(capacity),
@@ -265,7 +263,7 @@ impl<T: Peer> ProtocolDataManager<T> {
     /// the protocol session
     /// return: first message
     pub fn initialize_data(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
-        self.peer_id.replace(peer_id);
+        self.peer_id = peer_id;
         let zero_step_data = self.data_holder.zero_step(peer_id);
         self.client_data = zero_step_data;
         return self.client_data.clone();
@@ -334,7 +332,7 @@ where
     pub protocol_id: ProtocolIdentifier,
     pub client_addr: SocketAddr,
     pub data_manager: ProtocolDataManager<T>,
-    pub last_message: RefCell<ClientMessage>,
+    pub last_message: ClientMessage,
     pub bc_dests: Vec<ProtocolIdentifier>,
 }
 
@@ -348,7 +346,7 @@ impl<T: Peer> State<T> {
             registered: false,
             protocol_id,
             client_addr,
-            last_message: RefCell::new(ClientMessage::new()),
+            last_message: ClientMessage::new(),
             bc_dests: (1..(capacity + 1)).collect(),
             data_manager: data_m,
         }
@@ -370,7 +368,7 @@ impl<T: Peer> State<T> {
     fn handle_relay_message(&mut self, relay_msg: RelayMessage) -> Option<MessagePayload> {
         // parse relay message
         let from = relay_msg.peer_number;
-        if from == self.data_manager.peer_id.clone().into_inner() {
+        if from == self.data_manager.peer_id {
             debug!("-------self message accepted ------\n ");
         }
         let payload = relay_msg.message;
@@ -381,7 +379,7 @@ impl<T: Peer> State<T> {
         let _msg = ClientMessage::new();
         // create relay message
         let mut relay_message = RelayMessage::new(
-            self.data_manager.peer_id.clone().into_inner(),
+            self.data_manager.peer_id,
             self.protocol_id.clone(),
             self.client_addr,
         );
@@ -405,7 +403,7 @@ impl<T: Peer> State<T> {
     }
 
     fn get_last_message(&self) -> Option<ClientMessage> {
-        let last_msg = self.last_message.clone().into_inner();
+        let last_msg = self.last_message.clone();
         return Some(last_msg.clone());
     }
 
@@ -532,7 +530,7 @@ impl SessionClient {
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
-        let last_message = self.state.last_message.clone().into_inner();
+        // let last_message = self.state.last_message.clone();
         let mut new_message = None;
         let msg_type = msg.msg_type();
         match msg_type {
@@ -609,12 +607,6 @@ fn main() {
         .unwrap()
         .parse()
         .expect("Invalid number of participants");
-
-    let keys_filename: String = matches
-        .value_of("filename")
-        .unwrap()
-        .parse()
-        .expect("Invalid filename");
 
     let index = 20 + index;
     let client_addr: SocketAddr = format!("127.0.0.1:80{}", index).parse().unwrap();

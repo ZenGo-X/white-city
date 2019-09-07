@@ -1,30 +1,15 @@
-use rand::Rng;
 /// Implementation of a client that communicates with the relay server
 /// This client represents eddsa peer
 ///
 ///
 use std::cell::RefCell;
-use std::env;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::vec::Vec;
 use std::{thread, time};
 
-use std::sync::Arc;
-use std::sync::Mutex;
-
-use tokio::codec::Framed;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::Core;
-
-use futures::sync::mpsc;
-use futures::{Future, Sink, Stream};
-
-use structopt::StructOpt;
-
 use relay_server_common::{
-    ClientMessage, ClientToServerCodec, MessagePayload, PeerIdentifier, ProtocolIdentifier,
-    RelayMessage, ServerMessage, ServerMessageType, ServerResponse,
+    ClientMessage, MessagePayload, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage,
+    ServerMessageType, ServerResponse,
 };
 
 use curv::arithmetic::traits::Converter;
@@ -359,8 +344,9 @@ impl EddsaPeer {
 }
 
 impl Peer for EddsaPeer {
-    fn new(capacity: u32, _message: Vec<u8>) -> EddsaPeer {
-        let data = fs::read_to_string(format!("keys{}", env::args().nth(2).unwrap()))
+    fn new(capacity: u32, _message: Vec<u8>, index: u32) -> EddsaPeer {
+        println!("Index is {:?}", index);
+        let data = fs::read_to_string(format!("keys{}", index))
             .expect("Unable to load keys, did you run keygen first? ");
         let (key, _apk, kg_index): (KeyPair, KeyAgg, u32) = serde_json::from_str(&data).unwrap();
         EddsaPeer {
@@ -504,7 +490,7 @@ impl Peer for EddsaPeer {
     }
 }
 pub trait Peer {
-    fn new(capacity: u32, _message: Vec<u8>) -> Self;
+    fn new(capacity: u32, _message: Vec<u8>, index: u32) -> Self;
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload>;
     fn do_step(&mut self);
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload);
@@ -523,14 +509,14 @@ struct ProtocolDataManager<T: Peer> {
 }
 
 impl<T: Peer> ProtocolDataManager<T> {
-    pub fn new(capacity: u32, message: Vec<u8>) -> ProtocolDataManager<T>
+    pub fn new(capacity: u32, message: Vec<u8>, index: u32) -> ProtocolDataManager<T>
     where
         T: Peer,
     {
         ProtocolDataManager {
             peer_id: 0,
             capacity,
-            data_holder: Peer::new(capacity, message),
+            data_holder: Peer::new(capacity, message, index),
             client_data: None,
             new_client_data: false,
         }
@@ -596,12 +582,13 @@ impl SessionClient {
     pub fn new(
         client_addr: SocketAddr,
         server_addr: &tendermint::net::Address,
+        client_index: u32,
         capacity: u32,
         message: Vec<u8>,
     ) -> SessionClient {
         let protocol_id = 1;
         SessionClient {
-            state: State::new(protocol_id, capacity, client_addr, message),
+            state: State::new(protocol_id, capacity, client_addr, client_index, message),
             client: tendermint::rpc::Client::new(server_addr).unwrap(),
         }
     }
@@ -626,12 +613,14 @@ impl<T: Peer> State<T> {
         protocol_id: ProtocolIdentifier,
         capacity: u32,
         client_addr: SocketAddr,
+        client_index: u32,
         message: Vec<u8>,
     ) -> State<T>
     where
         T: Peer,
     {
-        let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity, message);
+        let data_m: ProtocolDataManager<T> =
+            ProtocolDataManager::new(capacity, message, client_index);
         State {
             registered: false,
             protocol_id,
@@ -922,11 +911,15 @@ fn main() {
         Err(_) => message.as_bytes().to_vec(),
     };
 
-    let index = 20 + index;
-    let client_addr: SocketAddr = format!("127.0.0.1:80{}", index).parse().unwrap();
+    // Port and ip address are used as a unique indetifier to the server
+    // This should be replaced with PKi down the road
+    let port = 8080 + index;
+    let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
     let mut session = SessionClient::new(
         client_addr,
+        // TODO: pass tendermint node address as parameter
         &"tcp://127.0.0.1:26657".parse().unwrap(),
+        index,
         capacity,
         message_to_sign,
     );
@@ -960,17 +953,17 @@ fn main() {
     // For the last iteration, no need to send server messages again
     if server_response.len() == capacity as usize {
         for msg in server_response.clone() {
-            next_message = session.handle_relay_message(msg.clone());
+            session.handle_relay_message(msg.clone());
         }
     } else {
-        'inner: loop {
+        loop {
             server_response = session.query();
             thread::sleep(time::Duration::from_millis(500));
             if server_response.len() == capacity as usize {
                 for msg in server_response.clone() {
-                    next_message = session.handle_relay_message(msg.clone());
+                    session.handle_relay_message(msg.clone());
                 }
-                break 'inner;
+                break;
             }
         }
     }
