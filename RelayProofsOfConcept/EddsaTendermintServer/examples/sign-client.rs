@@ -574,6 +574,11 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
                 .long("message")
                 .short("M"),
         )
+        .arg(
+            Arg::with_name("proxy")
+                .default_value("127.0.0.1:26657")
+                .long("proxy"),
+        )
         .get_matches()
 }
 
@@ -772,8 +777,8 @@ impl SessionClient {
 
     pub fn register(&mut self, index: u32, capacity: u32) -> ServerMessage {
         let mut msg = ClientMessage::new();
-        let index = 20 + index;
-        let client_addr: SocketAddr = format!("127.0.0.1:80{}", index).parse().unwrap();
+        let port = 8080 + index;
+        let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
         msg.register(client_addr, 0, capacity);
 
         println!("Regsiter message {:?}", msg);
@@ -904,6 +909,12 @@ fn main() {
         .parse()
         .expect("Invalid message to sign");
 
+    let proxy: String = matches
+        .value_of("proxy")
+        .unwrap()
+        .parse()
+        .expect("Invalid proxy address");
+
     let message_to_sign = match hex::decode(message.to_owned()) {
         Ok(x) => x,
         Err(_) => message.as_bytes().to_vec(),
@@ -912,11 +923,12 @@ fn main() {
     // Port and ip address are used as a unique indetifier to the server
     // This should be replaced with PKi down the road
     let port = 8080 + index;
+    let proxy_addr = format!("tcp://{}", proxy);
     let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
     let mut session = SessionClient::new(
         client_addr,
         // TODO: pass tendermint node address as parameter
-        &"tcp://127.0.0.1:26657".parse().unwrap(),
+        &proxy_addr.parse().unwrap(),
         index,
         capacity,
         message_to_sign,

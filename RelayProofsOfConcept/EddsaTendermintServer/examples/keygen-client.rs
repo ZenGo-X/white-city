@@ -301,6 +301,11 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
                 .long("filename")
                 .short("F"),
         )
+        .arg(
+            Arg::with_name("proxy")
+                .default_value("127.0.0.1:26657")
+                .long("proxy"),
+        )
         .get_matches()
 }
 
@@ -495,8 +500,8 @@ impl SessionClient {
 
     pub fn register(&mut self, index: u32, capacity: u32) -> ServerMessage {
         let mut msg = ClientMessage::new();
-        let index = 20 + index;
-        let client_addr: SocketAddr = format!("127.0.0.1:80{}", index).parse().unwrap();
+        let port = 8080 + index;
+        let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
         msg.register(client_addr, 0, capacity);
 
         debug!("Regsiter message {:?}", msg);
@@ -608,13 +613,16 @@ fn main() {
         .parse()
         .expect("Invalid number of participants");
 
-    let index = 20 + index;
-    let client_addr: SocketAddr = format!("127.0.0.1:80{}", index).parse().unwrap();
-    let mut session = SessionClient::new(
-        client_addr,
-        &"tcp://127.0.0.1:26657".parse().unwrap(),
-        capacity,
-    );
+    let proxy: String = matches
+        .value_of("proxy")
+        .unwrap()
+        .parse()
+        .expect("Invalid proxy address");
+
+    let port = 8080 + index;
+    let proxy_addr = format!("tcp://{}", proxy);
+    let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+    let mut session = SessionClient::new(client_addr, &proxy_addr.parse().unwrap(), capacity);
     let server_response = session.register(index, capacity);
     let next_message = session.generate_client_answer(server_response);
     debug!("Next message: {:?}", next_message);
