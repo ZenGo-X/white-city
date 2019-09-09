@@ -784,7 +784,14 @@ impl SessionClient {
         let mut msg = ClientMessage::new();
         let port = 8080 + index;
         let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
-        msg.register(client_addr, 0, capacity);
+        // Try to register with your index on keygen
+        msg.register(
+            client_addr,
+            self.state.protocol_id,
+            capacity,
+            // FIXME: state should not be that complicated
+            self.state.data_manager.data_holder.kg_index as i32,
+        );
 
         println!("Regsiter message {:?}", msg);
         let tx =

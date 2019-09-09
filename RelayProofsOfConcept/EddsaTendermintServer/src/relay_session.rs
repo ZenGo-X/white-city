@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 use relay_server_common::common::{NOT_A_PEER, STATE_NOT_INITIALIZED};
-use relay_server_common::{ClientMessage, ClientMessageType, StoredMessages};
+use relay_server_common::{ClientMessage, StoredMessages};
 use relay_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
 
 use relay_server_common::protocol::ProtocolDescriptor;
@@ -71,6 +71,7 @@ impl RelaySession {
         addr: SocketAddr,
         protocol_id: ProtocolIdentifier,
         capacity: u32,
+        index: i32,
     ) -> Option<u32> {
         let _addr = &addr;
         let number_of_active_peers = self.get_number_of_active_peers();
@@ -99,16 +100,15 @@ impl RelaySession {
                 self.set_state(RelaySessionState::Initialized);
             }
             info!("Registered peer {}", number_of_active_peers + 1);
-            Some(number_of_active_peers + 1) //peer_id
+            if index == -1 {
+                Some(number_of_active_peers + 1) //peer_id
+            } else {
+                Some(index as u32) //peer_id
+            }
         } else {
             warn!("Unable to register {:}", addr); // error
             None
         }
-    }
-
-    /// Return next index for a client
-    pub fn next_client_index(&self) -> u32 {
-        self.get_number_of_active_peers() + 1
     }
 
     /// Checks if it is possible for this address
@@ -182,11 +182,10 @@ impl RelaySession {
             }
         }
         // validate the sender in the message (peer_number field) is the peer associated with this address
-        let sender = msg.peer_number;
         let peer = self.get_peer_by_address(from);
 
         // if peer is present and registered
-        if let Some(p) = peer {
+        if let Some(_p) = peer {
             return Ok(());
         }
         return Err(NOT_A_PEER);
@@ -261,7 +260,7 @@ mod tests {
         let rs = RelaySession::new(capacity);
         let client_addr: SocketAddr = format!("127.0.0.1:808{}", 0).parse().unwrap();
 
-        let peer_num = rs.register_new_peer(client_addr, protocol_id, capacity);
+        let peer_num = rs.register_new_peer(client_addr, protocol_id, capacity, 0);
         assert_eq!(peer_num, Some(1));
     }
 
@@ -275,7 +274,7 @@ mod tests {
         for i in 0..capacity {
             let client_addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().unwrap();
             peer_num = rs
-                .register_new_peer(client_addr, protocol_id, capacity)
+                .register_new_peer(client_addr, protocol_id, capacity, 0)
                 .expect("Unable to register");
             println!("Peer number is {}", peer_num);
         }
@@ -297,7 +296,7 @@ mod tests {
             let client_addr: SocketAddr = format!("127.0.0.1:80{}", 30 + i).parse().unwrap();
             children.push(thread::spawn(move || {
                 rs_inner
-                    .register_new_peer(client_addr, protocol_id, capacity)
+                    .register_new_peer(client_addr, protocol_id, capacity, -1)
                     .expect("Unable to register");
             }));
         }
@@ -341,12 +340,12 @@ mod tests {
         assert_eq!(RelaySessionState::Empty, rs.state());
         for i in 0..capacity - 1 {
             let client_addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().unwrap();
-            rs.register_new_peer(client_addr, protocol_id, capacity);
+            rs.register_new_peer(client_addr, protocol_id, capacity, -1);
             // State is not initialized when not all are connected
             assert_eq!(RelaySessionState::Uninitialized, rs.state());
         }
         let client_addr: SocketAddr = format!("127.0.0.1:808{}", capacity - 1).parse().unwrap();
-        let messages = rs.register_new_peer(client_addr, protocol_id, capacity);
+        let messages = rs.register_new_peer(client_addr, protocol_id, capacity, -1);
         // Once all are connected, state should initialize
         assert_eq!(RelaySessionState::Initialized, rs.state());
         // TODO

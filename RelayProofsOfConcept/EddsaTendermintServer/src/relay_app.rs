@@ -102,7 +102,12 @@ impl abci::Application for RelayApp {
                 );
                 let client_index = self
                     .relay_session
-                    .register_new_peer(register.addr, register.protocol_id, register.capacity)
+                    .register_new_peer(
+                        register.addr,
+                        register.protocol_id,
+                        register.capacity,
+                        register.index,
+                    )
                     .unwrap();
                 resp.set_code(0);
                 info!("Setting data to {:?}", resp.data);

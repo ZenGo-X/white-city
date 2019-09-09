@@ -359,17 +359,6 @@ impl<T: Peer> State<T> {
 }
 
 impl<T: Peer> State<T> {
-    // fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload> {
-    //     // parse relay message
-    //     let relay_msg = msg.relay_message.unwrap();
-    //     let from = relay_msg.peer_number;
-    //     if from == self.data_manager.peer_id.clone().into_inner() {
-    //         debug!("-------self message accepted ------\n ");
-    //     }
-    //     let payload = relay_msg.message;
-    //     self.data_manager.get_next_message(from, payload)
-    // }
-
     fn handle_relay_message(&mut self, relay_msg: RelayMessage) -> Option<MessagePayload> {
         // parse relay message
         let from = relay_msg.peer_number;
@@ -385,7 +374,7 @@ impl<T: Peer> State<T> {
         // create relay message
         let mut relay_message = RelayMessage::new(
             self.data_manager.peer_id,
-            self.protocol_id.clone(),
+            self.protocol_id,
             self.client_addr,
         );
         let to: Vec<u32> = self.bc_dests.clone();
@@ -502,7 +491,7 @@ impl SessionClient {
         let mut msg = ClientMessage::new();
         let port = 8080 + index;
         let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
-        msg.register(client_addr, 0, capacity);
+        msg.register(client_addr, self.state.protocol_id, capacity);
 
         debug!("Regsiter message {:?}", msg);
         let tx =

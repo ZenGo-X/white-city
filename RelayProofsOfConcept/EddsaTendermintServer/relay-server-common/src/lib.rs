@@ -76,6 +76,8 @@ pub struct RegisterMessage {
     pub protocol_id: ProtocolIdentifier,
 
     pub capacity: u32,
+
+    pub index: i32,
 }
 
 #[derive(Debug, PartialEq)]
@@ -169,11 +171,18 @@ impl ClientMessage {
         }
     }
 
-    pub fn register(&mut self, addr: SocketAddr, protocol_id: ProtocolIdentifier, capacity: u32) {
+    pub fn register(
+        &mut self,
+        addr: SocketAddr,
+        protocol_id: ProtocolIdentifier,
+        capacity: u32,
+        index: i32,
+    ) {
         self.register = Some(RegisterMessage {
             addr,
             protocol_id,
             capacity,
+            index,
         });
     }
 
