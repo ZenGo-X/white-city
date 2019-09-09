@@ -775,8 +775,12 @@ impl SessionClient {
         println!("RawResponse: {:?}", response);
         let server_response = response.log;
         println!("ServerResponseLog {:?}", server_response);
+        let empty_vec = Vec::new();
         let server_response: Vec<RelayMessage> =
-            serde_json::from_str(&server_response.to_string()).unwrap();
+            match serde_json::from_str(&server_response.to_string()) {
+                Ok(server_response) => server_response,
+                Err(_) => empty_vec,
+            };
         return server_response;
     }
 
