@@ -143,6 +143,17 @@ impl abci::Application for RelayApp {
                     let relay_msg = msg.relay_message.as_ref().unwrap().clone();
                     response_vec.push(relay_msg.clone());
                 }
+                if response_vec.len() == self.relay_session.protocol().capacity as usize {
+                    // resp.set_log("Some string".to_owned());
+                    resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
+                    debug!("Response log {:?}", resp.log);
+                } else {
+                    resp.set_log(
+                        serde_json::to_string(&response_vec.clear())
+                            .unwrap()
+                            .to_owned(),
+                    );
+                }
                 resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
                 debug!("Response log {:?}", resp.log);
 

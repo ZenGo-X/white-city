@@ -481,9 +481,12 @@ impl SessionClient {
         let response = self.client.abci_query(None, tx, None, false).unwrap();
         debug!("RawResponse: {:?}", response);
         let server_response = response.log;
-        debug!("ServerResponseLog {:?}", server_response);
+        let empty_vec = Vec::new();
         let server_response: Vec<RelayMessage> =
-            serde_json::from_str(&server_response.to_string()).unwrap();
+            match serde_json::from_str(&server_response.to_string()) {
+                Ok(server_response) => server_response,
+                Err(_) => empty_vec,
+            };
         return server_response;
     }
 
@@ -491,7 +494,8 @@ impl SessionClient {
         let mut msg = ClientMessage::new();
         let port = 8080 + index;
         let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
-        msg.register(client_addr, self.state.protocol_id, capacity);
+        // No index to begin with
+        msg.register(client_addr, self.state.protocol_id, capacity, -1);
 
         debug!("Regsiter message {:?}", msg);
         let tx =
