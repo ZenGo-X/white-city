@@ -441,12 +441,17 @@ impl Peer for EddsaPeer {
         let (_key, orig_apk, _kg_index): (KeyPair, KeyAgg, u32) =
             serde_json::from_str(&data).unwrap();
 
+        let eight: FE = ECScalar::from(&BigInt::from(8));
+        let eight_inv = eight.invert();
+
+        let orig_apk = orig_apk.apk * &eight_inv;
+
         println!("Aggregated pk {:?}", apk);
         println!("Orig pk {:?}", orig_apk);
-        println!("Equal hash? {:?}", apk.hash == orig_apk.hash);
-        println!("Equal? {:?}", apk.apk == orig_apk.apk);
-
-        match verify(&signature, &self.message[..], &apk.apk) {
+        // Original apk should be equal to the apk created during signing
+        assert_eq!(orig_apk, apk.apk);
+        // Verify signature against the original! pubkey
+        match verify(&signature, &self.message[..], &orig_apk) {
             Ok(_) => {
                 let mut R_vec = signature.R.pk_to_key_slice().to_vec();
                 let mut s_vec = BigInt::to_vec(&signature.s.to_big_int());
