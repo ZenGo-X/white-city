@@ -3,10 +3,9 @@ use abci::{
     RequestCheckTx, RequestDeliverTx, RequestQuery, ResponseCheckTx, ResponseDeliverTx,
     ResponseQuery,
 };
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use relay_server_common::protocol::ProtocolDescriptor;
 use relay_server_common::{ClientMessage, ClientMessageType, ServerMessage, ServerResponse};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 pub struct RelayApp {
     relay_session: RelaySession,
@@ -120,7 +119,6 @@ impl abci::Application for RelayApp {
             ClientMessageType::RelayMessage => {
                 let relay_msg = client_message.clone().relay_message.unwrap();
                 let peer_id = relay_msg.peer_number;
-                let addr = relay_msg.from;
                 info!("Got relay message from {}", peer_id);
                 if self.can_relay(&client_message) == 0 {
                     debug!("I can relay this")
@@ -138,8 +136,7 @@ impl abci::Application for RelayApp {
                     .get(&self.relay_session.round())
                     .unwrap();
 
-                for (_client_idx, msg) in this_round_messages.into_iter() {
-                    let server_msg = ServerMessage::new();
+                for (_client_idx, msg) in this_round_messages.iter() {
                     let relay_msg = msg.relay_message.as_ref().unwrap().clone();
                     response_vec.push(relay_msg.clone());
                 }
@@ -191,7 +188,7 @@ impl abci::Application for RelayApp {
         debug!("All messages {:?}", stored_messages);
         let this_round_messages = stored_messages.messages.get(&requested_stage).unwrap();
 
-        for (_client_idx, msg) in this_round_messages.into_iter() {
+        for (_client_idx, msg) in this_round_messages.iter() {
             let relay_msg = msg.relay_message.as_ref().unwrap().clone();
             debug!("Setting message {:?}", relay_msg);
             response_vec.push(relay_msg.clone());
