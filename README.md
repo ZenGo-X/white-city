@@ -2,17 +2,20 @@
 API to integrate distributed network for secure computation protocols. 
 
 ### Background
-MPC communication models require use of concepts such as Termination, Rounds, Broadcast channel, p2p channel and so on. The need for this API came to us at KZen since we work with multiple MPC algorithms and we couldn't find a robust and easy to plug into distributed network layer that answer the specific needs of MPC protocols. We aimed to create a unified API that enjoys best practices and tools of distributed network technologies such as consensus, fault tolerance and more. We believe this framework can be of use to other MPC implementers and therefore we are building it in modular way to answer all types of MPC use cases. 
+Secure Multiparty Computation (MPC) has transitioned from a thoretical field to applied technology with real life use cases. In MPC a set of n parties are running a distributed computation over private inputs. To do so, MPC protocols designers make assumptions on the required network and communication channels. A complete p2p network setup might turn out to be costly, effectively eliminating the practicallity of running MPC at scale. 
+
+Instead, we suggest using untrusted coordinator, connected in a star topology to all clients. This gets us immidiate improvment on communication complexity of simple p2p, and potentially benefits robustness, accountabillity and fault tolarance. 
+
 
 ### Project Status: 
-The current stage is focused on the idea of replicated state machine. The repo contain three proofs of concepts for centralized state machine where an untrusted coordinator (or coordinators) is maintaining a state of the protocol and parties are clients, reading and writing to the state. This gives a few benefits over message passing system: Clients can have down time and the protocol can run more offline.
+The current stage is focused on the idea of replicated state machine. The repo contains three proofs of concepts. 
 The latest implementation uses Tendermint to replicate the state machine across a set of known servers.
-Clients broadcast transactions to the servers to change the state, and read messages from the public bulletin board.
+Clients broadcast transactions to the servers to change the state, and read messages from the public bulletin board. Older PoCs are using a single untrusted coordinator. 
 
 - **[Tendermint](https://github.com/KZen-networks/white-city/tree/master/RelayProofsOfConcept/EddsaTendermintServer):** Broadcast channel using Tendermint as an immutable bulletin board.
 - **[TokioServer](https://github.com/KZen-networks/white-city/tree/master/RelayProofsOfConcept/EddsaTokioServer):** a socket level implementation using Tokio Crate.
 - **[RocketServer](https://github.com/KZen-networks/white-city/tree/master/RelayProofsOfConcept/EddsaRocketServer):** a Http server implementation using Rocket crate. 
-Proofs of concept are currently running [multi party EdDSA](https://github.com/KZen-networks/multi-party-eddsa) library. 
+Proofs of concept are currently running [multi party EdDSA](https://github.com/KZen-networks/multi-party-eddsa) library. In general, all messages in the MPC protocol should be broadcast messages (p2p messages are broadcasted encrypted). 
 
 As a side project there is also an effort to formally verify the centralized state machine model in [Coq/TLA+](https://github.com/KZen-networks/white-city/tree/master/RelayProofsOfConcept/Formal-spec)
 
