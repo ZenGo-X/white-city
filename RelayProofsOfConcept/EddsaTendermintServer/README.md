@@ -31,7 +31,7 @@ At the moment, a reset needs to be performed after the key gen and before a sign
 Reset the tendermint cluster with 
 `./tools/local-cluster-reset.sh`
 
-In the demo, a cluster of 4 nodes runs the protocol, after server 3 fails, the protocol completes sucessfully.
+In the demo 5 clients create a threshold signature. A cluster of 4 nodes runs the protocol, after node 3 fails, the protocol still completes successfully.
 
 ![demo](./demo/tendermint-demo.gif)
 
