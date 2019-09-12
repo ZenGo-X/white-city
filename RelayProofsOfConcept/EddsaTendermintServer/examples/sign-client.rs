@@ -1,30 +1,15 @@
-use rand::Rng;
 /// Implementation of a client that communicates with the relay server
 /// This client represents eddsa peer
 ///
 ///
 use std::cell::RefCell;
-use std::env;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::vec::Vec;
 use std::{thread, time};
 
-use std::sync::Arc;
-use std::sync::Mutex;
-
-use tokio::codec::Framed;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::Core;
-
-use futures::sync::mpsc;
-use futures::{Future, Sink, Stream};
-
-use structopt::StructOpt;
-
 use relay_server_common::{
-    ClientMessage, ClientToServerCodec, MessagePayload, PeerIdentifier, ProtocolIdentifier,
-    RelayMessage, ServerMessage, ServerMessageType, ServerResponse,
+    ClientMessage, MessagePayload, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage,
+    ServerMessageType, ServerResponse,
 };
 
 use curv::arithmetic::traits::Converter;
@@ -41,26 +26,7 @@ use relay_server_common::common::*;
 use std::collections::HashMap;
 use std::fs;
 
-// Arguments parsing
-#[derive(StructOpt, Debug)]
-#[structopt(name = "eddsa-sign-client")]
-struct Opt {
-    /// Number of participants in the protocol
-    #[structopt(short = "P", long = "participants", default_value = "2")]
-    capacity: u32,
-
-    /// Address the server listens on
-    #[structopt(name = "ADDRESS")]
-    address: String,
-
-    /// Output file
-    #[structopt(name = "KEY_FILE", parse(from_os_str))]
-    output: PathBuf,
-
-    /// Message to sign
-    #[structopt(name = "MESSAGE")]
-    message: String,
-}
+use clap::{App, Arg, ArgMatches};
 
 #[allow(non_snake_case)]
 struct EddsaPeer {
@@ -139,13 +105,10 @@ impl EddsaPeer {
         println!("# of public keys : {:?}", pks.len());
         let peer_id = self.peer_id;
         let index = (peer_id - 1) as usize;
-        let agg_key = if self.kg_index == peer_id {
-            KeyPair::key_aggregation_n(&pks, &index)
-        } else {
-            pks.reverse();
-            KeyPair::key_aggregation_n(&pks, &(1 - index))
-        };
-        return agg_key;
+        println!("Public keys {:?}", &pks);
+        println!("KG index:{}, SIG index:{}", self.kg_index, peer_id);
+        // TODO: sort the pks according to key-gen indexes when applying
+        KeyPair::key_aggregation_n(&pks, &index)
     }
 
     fn validate_commitments(&mut self) -> bool {
@@ -280,6 +243,7 @@ impl EddsaPeer {
         false
     }
 }
+
 impl EddsaPeer {
     /// steps - in each step the client does a calculation on its
     /// data, and updates the data holder with the new data
@@ -374,8 +338,9 @@ impl EddsaPeer {
 }
 
 impl Peer for EddsaPeer {
-    fn new(capacity: u32, _message: Vec<u8>) -> EddsaPeer {
-        let data = fs::read_to_string(env::args().nth(2).unwrap())
+    fn new(capacity: u32, _message: Vec<u8>, index: u32) -> EddsaPeer {
+        println!("Index is {:?}", index);
+        let data = fs::read_to_string(format!("keys{}", index))
             .expect("Unable to load keys, did you run keygen first? ");
         let (key, _apk, kg_index): (KeyPair, KeyAgg, u32) = serde_json::from_str(&data).unwrap();
         EddsaPeer {
@@ -407,13 +372,16 @@ impl Peer for EddsaPeer {
 
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
         self.peer_id = peer_id;
-        let pk/*:Ed25519Point */= self.client_key.public_key.clone();
-        //self.add_pk(peer_id, pk);
+        let pk = self.client_key.public_key.clone();
 
         let pk_s = serde_json::to_string(&pk).expect("Failed in serialization");
 
         self.pk_msg = Some(generate_pk_message_payload(&pk_s));
         return self.pk_msg.clone();
+    }
+
+    fn current_step(&self) -> u32 {
+        self.current_step
     }
 
     fn do_step(&mut self) {
@@ -468,7 +436,22 @@ impl Peer for EddsaPeer {
         // verify message with signature
         let apk = self.aggregate_pks();
 
-        match verify(&signature, &self.message[..], &apk.apk) {
+        let data = fs::read_to_string(format!("keys{}", self.peer_id))
+            .expect("Unable to load keys, did you run keygen first? ");
+        let (_key, orig_apk, _kg_index): (KeyPair, KeyAgg, u32) =
+            serde_json::from_str(&data).unwrap();
+
+        let eight: FE = ECScalar::from(&BigInt::from(8));
+        let eight_inv = eight.invert();
+
+        let orig_apk = orig_apk.apk * &eight_inv;
+
+        println!("Aggregated pk {:?}", apk);
+        println!("Orig pk {:?}", orig_apk);
+        // Original apk should be equal to the apk created during signing
+        assert_eq!(orig_apk, apk.apk);
+        // Verify signature against the original! pubkey
+        match verify(&signature, &self.message[..], &orig_apk) {
             Ok(_) => {
                 let mut R_vec = signature.R.pk_to_key_slice().to_vec();
                 let mut s_vec = BigInt::to_vec(&signature.s.to_big_int());
@@ -516,37 +499,35 @@ impl Peer for EddsaPeer {
     }
 }
 pub trait Peer {
-    fn new(capacity: u32, _message: Vec<u8>) -> Self;
+    fn new(capacity: u32, _message: Vec<u8>, index: u32) -> Self;
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload>;
     fn do_step(&mut self);
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload);
     fn get_next_item(&mut self) -> Option<MessagePayload>;
     fn finalize(&mut self) -> Result<(), &'static str>;
     fn is_done(&mut self) -> bool;
+    fn current_step(&self) -> u32;
 }
 
 struct ProtocolDataManager<T: Peer> {
     pub peer_id: PeerIdentifier,
     pub capacity: u32,
-    pub current_step: u32,
     pub data_holder: T, // will be filled when initializing, and on each new step
     pub client_data: Option<MessagePayload>, // new data calculated by this peer at the beginning of a step (that needs to be sent to other peers)
     pub new_client_data: bool,
 }
 
 impl<T: Peer> ProtocolDataManager<T> {
-    pub fn new(capacity: u32, message: Vec<u8>) -> ProtocolDataManager<T>
+    pub fn new(capacity: u32, message: Vec<u8>, index: u32) -> ProtocolDataManager<T>
     where
         T: Peer,
     {
         ProtocolDataManager {
             peer_id: 0,
-            current_step: 0,
             capacity,
-            data_holder: Peer::new(capacity, message),
+            data_holder: Peer::new(capacity, message, index),
             client_data: None,
             new_client_data: false,
-            //message: message.clone(),
         }
     }
 
@@ -572,118 +553,103 @@ impl<T: Peer> ProtocolDataManager<T> {
     }
 }
 
-struct Client<T>
+fn arg_matches<'a>() -> ArgMatches<'a> {
+    App::new("relay-server")
+        .arg(
+            Arg::with_name("index")
+                .short("I")
+                .long("index")
+                .default_value("1"),
+        )
+        .arg(
+            Arg::with_name("capacity")
+                .default_value("2")
+                .short("P")
+                .long("capacity"),
+        )
+        .arg(
+            Arg::with_name("filename")
+                .default_value("keys")
+                .long("filename")
+                .short("F"),
+        )
+        .arg(
+            Arg::with_name("message")
+                .default_value("message")
+                .long("message")
+                .short("M"),
+        )
+        .arg(
+            Arg::with_name("proxy")
+                .default_value("127.0.0.1:26657")
+                .long("proxy"),
+        )
+        .get_matches()
+}
+
+struct SessionClient {
+    pub state: State<EddsaPeer>,
+    pub client: tendermint::rpc::Client,
+}
+
+impl SessionClient {
+    pub fn new(
+        client_addr: SocketAddr,
+        server_addr: &tendermint::net::Address,
+        client_index: u32,
+        capacity: u32,
+        message: Vec<u8>,
+    ) -> SessionClient {
+        let protocol_id = 1;
+        SessionClient {
+            state: State::new(protocol_id, capacity, client_addr, client_index, message),
+            client: tendermint::rpc::Client::new(server_addr).unwrap(),
+        }
+    }
+}
+
+/// Inner client state, responsible for parsing server responses and producing the next message
+struct State<T>
 where
     T: Peer,
 {
     pub registered: bool,
     pub protocol_id: ProtocolIdentifier,
+    pub client_addr: SocketAddr,
     pub data_manager: ProtocolDataManager<T>,
     pub last_message: RefCell<ClientMessage>,
     pub bc_dests: Vec<ProtocolIdentifier>,
     pub timeout: u32,
 }
 
-impl<T: Peer> Client<T> {
-    pub fn new(protocol_id: ProtocolIdentifier, capacity: u32, message: Vec<u8>) -> Client<T>
+impl<T: Peer> State<T> {
+    pub fn new(
+        protocol_id: ProtocolIdentifier,
+        capacity: u32,
+        client_addr: SocketAddr,
+        client_index: u32,
+        message: Vec<u8>,
+    ) -> State<T>
     where
         T: Peer,
     {
-        let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity, message);
-        Client {
+        let data_m: ProtocolDataManager<T> =
+            ProtocolDataManager::new(capacity, message, client_index);
+        State {
             registered: false,
             protocol_id,
+            client_addr,
             last_message: RefCell::new(ClientMessage::new()),
             bc_dests: (1..(capacity + 1)).collect(),
             timeout: 100, // 3 second delay in sending messages
             data_manager: data_m,
         }
     }
-
-    pub fn respond_to_server<E: 'static>(
-        &mut self,
-        msg: ServerMessage,
-        // A sender to pass messages to be written back to the server
-        tx: mpsc::Sender<ClientMessage>,
-    ) -> Box<dyn Future<Item = (), Error = E>> {
-        let response = self.generate_client_answer(msg).unwrap();
-        println!("Returning {:?}", response);
-        if response.is_empty() {
-            Box::new(futures::future::ok(()))
-        } else {
-            Box::new(tx.clone().send(response.clone()).then(|_| Ok(())))
-        }
-    }
-
-    pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
-        let last_message = self.last_message.clone().into_inner();
-        let mut new_message = None;
-        let msg_type = msg.msg_type();
-        match msg_type {
-            ServerMessageType::Response => {
-                let next = self.handle_server_response(&msg);
-                match next {
-                    Ok(next_msg) => {
-                        new_message = Some(next_msg.clone());
-                    }
-                    Err(_) => {
-                        println!("Error in handle_server_response");
-                    }
-                }
-            }
-            ServerMessageType::RelayMessage => {
-                let next = self.handle_relay_message(msg.clone());
-                match next {
-                    Some(next_msg) => {
-                        //println!("next message to send is {:}", next_msg);
-                        new_message = Some(self.generate_relay_message(next_msg.clone()));
-                    }
-                    None => {
-                        println!("next item is None. Client is finished.");
-                        new_message = Some(ClientMessage::new());
-                    }
-                }
-            }
-            ServerMessageType::Abort => {
-                println!("Got abort message");
-                //Ok(MessageProcessResult::NoMessage)
-                new_message = Some(ClientMessage::new());
-            }
-            ServerMessageType::Undefined => {
-                new_message = Some(ClientMessage::new());
-                //panic!("Got undefined message: {:?}",msg);
-            }
-        };
-        if last_message.is_empty() {
-            match new_message {
-                Some(msg) => {
-                    self.last_message.replace(msg.clone());
-                    return Some(msg.clone());
-                }
-                None => return None,
-            }
-        } else {
-            let _new_message = new_message.clone().unwrap();
-            if !last_message.are_equal_payloads(&_new_message) {
-                println!("last message changed");
-                self.last_message.replace(_new_message.clone());
-            }
-            self.wait_timeout();
-            return Some(self.last_message.clone().into_inner());
-        }
-    }
-
-    pub fn generate_register_message(&mut self) -> ClientMessage {
-        let mut msg = ClientMessage::new();
-        msg.register(self.protocol_id.clone(), self.data_manager.capacity.clone());
-        msg
-    }
 }
 
-impl<T: Peer> Client<T> {
-    fn handle_relay_message(&mut self, msg: ServerMessage) -> Option<MessagePayload> {
+impl<T: Peer> State<T> {
+    fn handle_relay_message(&mut self, relay_msg: RelayMessage) -> Option<MessagePayload> {
         // parse relay message
-        let relay_msg = msg.relay_message.unwrap();
         let from = relay_msg.peer_number;
         if from == self.data_manager.peer_id {
             println!("-------self message accepted ------\n ");
@@ -695,8 +661,11 @@ impl<T: Peer> Client<T> {
     fn generate_relay_message(&self, payload: MessagePayload) -> ClientMessage {
         let _msg = ClientMessage::new();
         // create relay message
-        let mut relay_message =
-            RelayMessage::new(self.data_manager.peer_id, self.protocol_id.clone());
+        let mut relay_message = RelayMessage::new(
+            self.data_manager.peer_id,
+            self.protocol_id.clone(),
+            self.client_addr,
+        );
         let to: Vec<u32> = self.bc_dests.clone();
 
         let mut client_message = ClientMessage::new();
@@ -706,19 +675,13 @@ impl<T: Peer> Client<T> {
         client_message
     }
 
-    fn wait_timeout(&self) {
-        //    println!("Waiting timeout..");
-        let wait_time = time::Duration::from_millis(self.timeout as u64);
-        thread::sleep(wait_time);
-    }
-
     fn handle_register_response(&mut self, peer_id: PeerIdentifier) -> Result<ClientMessage, ()> {
         println!("Peer identifier: {}", peer_id);
         // Set the session parameters
         let message = self
             .data_manager
             .initialize_data(peer_id)
-            .unwrap_or_else(|| panic!("Failed to initialize"));
+            .unwrap_or_else(|| panic!("failed to initialize"));
         Ok(self.generate_relay_message(message.clone()))
     }
 
@@ -741,6 +704,7 @@ impl<T: Peer> Client<T> {
                 }
             }
             not_initialized_resp if not_initialized_resp == String::from(STATE_NOT_INITIALIZED) => {
+                println!("Not initialized, sending again");
                 let last_msg = self.get_last_message();
                 match last_msg {
                     Some(msg) => {
@@ -752,8 +716,8 @@ impl<T: Peer> Client<T> {
                 }
             }
             _ => {
-                println!("Didn't handle error correctly");
-                return Err("Error response handling failed");
+                println!("didn't handle error correctly");
+                return Err("error response handling failed");
             }
         }
     }
@@ -784,7 +748,7 @@ impl<T: Peer> Client<T> {
                 match msg {
                     Ok(_msg) => return Ok(_msg),
                     Err(_) => {
-                        println!("Error occured");
+                        println!("error occured");
                         return Ok(ClientMessage::new());
                     }
                 }
@@ -800,10 +764,132 @@ pub enum MessageProcessResult {
     Abort,
 }
 
+impl SessionClient {
+    pub fn query(&self) -> Vec<RelayMessage> {
+        let tx = self.state.data_manager.data_holder.current_step();
+        println!("Requesting messages for step {:?}", tx);
+        let response = self
+            .client
+            .abci_query(None, tx.to_string(), None, false)
+            .unwrap();
+        println!("RawResponse: {:?}", response);
+        let server_response = response.log;
+        println!("ServerResponseLog {:?}", server_response);
+        let empty_vec = Vec::new();
+        let server_response: Vec<RelayMessage> =
+            match serde_json::from_str(&server_response.to_string()) {
+                Ok(server_response) => server_response,
+                Err(_) => empty_vec,
+            };
+        return server_response;
+    }
+
+    pub fn register(&mut self, index: u32, capacity: u32) -> ServerMessage {
+        let mut msg = ClientMessage::new();
+        let port = 8080 + index;
+        let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+        // Try to register with your index on keygen
+        msg.register(
+            client_addr,
+            self.state.protocol_id,
+            capacity,
+            // FIXME: state should not be that complicated
+            self.state.data_manager.data_holder.kg_index as i32,
+        );
+
+        println!("Regsiter message {:?}", msg);
+        let tx =
+            tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
+        let response = self.client.broadcast_tx_commit(tx).unwrap();
+        let server_response = response.clone().deliver_tx.log.unwrap();
+        println!("Registered OK");
+        println!("ServerResponse {:?}", server_response);
+        let server_response: ServerMessage =
+            serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
+        println!("ServerResponse {:?}", server_response);
+        // TODO Add Error checks etc
+        self.state.registered = true;
+        return server_response;
+    }
+
+    pub fn send_message(&self, msg: ClientMessage) -> Vec<RelayMessage> {
+        println!("Sending message {:?}", msg);
+        let tx =
+            tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
+        let response = self.client.broadcast_tx_commit(tx).unwrap();
+        let server_response = response.clone().deliver_tx.log.unwrap();
+        println!("ServerResponse {:?}", server_response);
+        let server_response: Vec<RelayMessage> =
+            serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
+        return server_response;
+    }
+
+    pub fn handle_relay_message(&mut self, msg: RelayMessage) -> Option<ClientMessage> {
+        let mut new_message = Some(ClientMessage::new());
+        let next = self.state.handle_relay_message(msg.clone());
+        println!("Next {:?}", next);
+        match next {
+            Some(next_msg) => {
+                println!("next message to send is {:}", next_msg);
+                new_message = Some(self.state.generate_relay_message(next_msg.clone()));
+            }
+            None => {
+                println!("next item is None. Client is finished.");
+                new_message = Some(ClientMessage::new());
+            }
+        }
+        new_message
+    }
+
+    pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
+        let mut new_message = None;
+        let msg_type = msg.msg_type();
+        match msg_type {
+            ServerMessageType::Response => {
+                let next = self.state.handle_server_response(&msg);
+                match next {
+                    Ok(next_msg) => {
+                        new_message = Some(next_msg.clone());
+                    }
+                    Err(_) => {
+                        println!("Error in handle_server_response");
+                    }
+                }
+            }
+            // TODO: better cases separation, this is a placeholder
+            ServerMessageType::RelayMessage => {
+                new_message = Some(ClientMessage::new());
+            }
+            //     let next = self.state.handle_relay_message(msg.clone());
+            //     match next {
+            //         Some(next_msg) => {
+            //             //println!("next message to send is {:}", next_msg);
+            //             new_message = Some(self.state.generate_relay_message(next_msg.clone()));
+            //         }
+            //         None => {
+            //             println!("next item is None. Client is finished.");
+            //             new_message = Some(ClientMessage::new());
+            //         }
+            //     }
+            // }
+            ServerMessageType::Abort => {
+                println!("Got abort message");
+                //Ok(MessageProcessResult::NoMessage)
+                new_message = Some(ClientMessage::new());
+            }
+            ServerMessageType::Undefined => {
+                new_message = Some(ClientMessage::new());
+                //panic!("Got undefined message: {:?}",msg);
+            }
+        };
+        new_message
+    }
+}
+
 #[derive(Debug)]
 enum MessagePayloadType {
     /// Types of expected relay messages
-    /// for step 0 we expect PublicKeyMessate
+    /// for step 0 we expect PUBLIC_KEY_MESSAGE
     /// for step 1 we expect Commitment
     /// for step 2 we expect RMessage
     /// for step 3 we expect Signature
@@ -814,64 +900,97 @@ enum MessagePayloadType {
 }
 
 fn main() {
-    let opt = Opt::from_args();
+    better_panic::Settings::debug()
+        .most_recent_first(false)
+        .lineno_suffix(true)
+        .install();
 
-    let addr = opt.address;
+    let matches = arg_matches();
 
-    let protocol_identifier_arg = 1;
-    let protocol_capapcity_arg = opt.capacity;
+    let index: u32 = matches
+        .value_of("index")
+        .unwrap()
+        .parse()
+        .expect("Unable to parse index");
 
-    let addr = addr.parse::<SocketAddr>().unwrap();
+    let capacity: u32 = matches
+        .value_of("capacity")
+        .unwrap()
+        .parse()
+        .expect("Invalid number of participants");
 
-    let message_str = env::args().nth(3).unwrap_or("".to_string());
-    let message_to_sign = match hex::decode(opt.message.clone()) {
+    let message: String = matches
+        .value_of("message")
+        .unwrap()
+        .parse()
+        .expect("Invalid message to sign");
+
+    let proxy: String = matches
+        .value_of("proxy")
+        .unwrap()
+        .parse()
+        .expect("Invalid proxy address");
+
+    let message_to_sign = match hex::decode(message.to_owned()) {
         Ok(x) => x,
-        Err(_) => message_str.as_bytes().to_vec(),
+        Err(_) => message.as_bytes().to_vec(),
     };
 
-    // Create the event loop and initiate the connection to the remote server
-    let mut core = Core::new().unwrap();
-    let handle = core.handle();
-    let tcp = TcpStream::connect(&addr, &handle);
-
-    let session: std::sync::Arc<std::sync::Mutex<Client<EddsaPeer>>> =
-        Arc::new(Mutex::new(Client::new(
-            protocol_identifier_arg,
-            protocol_capapcity_arg,
-            message_to_sign,
-        )));
-
-    let handshake = tcp.and_then(|stream| {
-        let handshake_io = Framed::new(stream, ClientToServerCodec::new(false));
-        let mut client = session.lock().unwrap();
-        let msg = client.generate_register_message();
-        handshake_io
-            .send(msg)
-            .map(|handshake_io| handshake_io.into_inner())
-            .map_err(|e| e.into())
-    });
-
-    let client = handshake.and_then(|socket| {
-        let mut client = session.lock().unwrap();
-        let _msg = client.generate_register_message();
-
-        let (to_server, from_server) = Framed::new(socket, ClientToServerCodec::new(false)).split();
-        let (tx, rx) = mpsc::channel(0);
-        let reader = from_server.for_each(move |msg| {
-            println!("Received {:?}", msg);
-            client.respond_to_server(msg, tx.clone())
-        });
-
-        let writer = rx
-            .map_err(|()| unreachable!("rx can't fail"))
-            .fold(to_server, |to_server, msg| to_server.send(msg))
-            .map(|_| ());
-
-        reader
-            .select(writer)
-            .map(|_| println!("Closing connection"))
-            .map_err(|(err, _)| err.into())
-    });
-
-    core.run(client).unwrap();
+    // Port and ip address are used as a unique indetifier to the server
+    // This should be replaced with PKi down the road
+    let port = 8080 + index;
+    let proxy_addr = format!("tcp://{}", proxy);
+    let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+    let mut session = SessionClient::new(
+        client_addr,
+        // TODO: pass tendermint node address as parameter
+        &proxy_addr.parse().unwrap(),
+        index,
+        capacity,
+        message_to_sign,
+    );
+    let server_response = session.register(index, capacity);
+    let mut next_message = session.generate_client_answer(server_response);
+    println!("Next message: {:?}", next_message);
+    // TODO The client/server response could be an error
+    let mut server_response = session.send_message(next_message.clone().unwrap());
+    println!("Server Response: {:?}", server_response);
+    // TODO: as many steps as there are in the protocol
+    'outer: for _ in 0..3 {
+        if server_response.len() == capacity as usize {
+            for msg in server_response.clone() {
+                next_message = session.handle_relay_message(msg.clone());
+            }
+            server_response = session.send_message(next_message.clone().unwrap());
+        } else {
+            'inner: loop {
+                server_response = session.query();
+                thread::sleep(time::Duration::from_millis(500));
+                if server_response.len() == capacity as usize {
+                    for msg in server_response.clone() {
+                        next_message = session.handle_relay_message(msg.clone());
+                    }
+                    server_response = session.send_message(next_message.clone().unwrap());
+                    break 'inner;
+                }
+            }
+        }
+    }
+    // For the last iteration, no need to send server messages again
+    if server_response.len() == capacity as usize {
+        for msg in server_response.clone() {
+            session.handle_relay_message(msg.clone());
+        }
+    } else {
+        loop {
+            server_response = session.query();
+            thread::sleep(time::Duration::from_millis(500));
+            if server_response.len() == capacity as usize {
+                for msg in server_response.clone() {
+                    session.handle_relay_message(msg.clone());
+                }
+                break;
+            }
+        }
+    }
 }

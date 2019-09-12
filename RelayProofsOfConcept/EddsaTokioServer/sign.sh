@@ -1,7 +1,7 @@
 echo "$0: MP-EDDSA"
 #clean
 
-rm signature
+rm signature??
 
 kill -9 $(lsof -t -i:8080)
 
