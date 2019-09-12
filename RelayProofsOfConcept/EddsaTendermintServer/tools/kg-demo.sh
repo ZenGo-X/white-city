@@ -5,7 +5,7 @@ rm keys?
 rm keys??
 
 
-n=50
+n=5
 
 echo "keygen part"
 for i in $(seq 1 $n);
