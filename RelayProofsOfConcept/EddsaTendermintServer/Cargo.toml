@@ -9,7 +9,7 @@ chrono = "0.4"
 log = "0.4"
 clap = "2.33"
 fern = "0.5"
-abci = "0.6"
+hex = "0.3.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 subtle-encoding = { version = "0.3", features = ["bech32-preview"] }
@@ -23,13 +23,16 @@ multi-party-ed25519 = { git = "https://github.com/KZen-networks/multi-party-edds
 git = "https://github.com/KZen-networks/curv"
 features=["ec_ed25519"]
 
-[lib]
-name = "relay_server"
-path = "src/lib.rs"
+[dependencies.abci]
+git="https://github.com/tendermint/rust-abci"
+branch="develop"
 
 [dependencies.tendermint]
 version = "0.10.0"
 git="https://github.com/amanusk/tendermint-rs"
 branch = "develop"
-# path="/home/amanusk/rust/tendermint-rs"
 features = ["rpc"]
+
+[lib]
+name = "relay_server"
+path = "src/lib.rs"
