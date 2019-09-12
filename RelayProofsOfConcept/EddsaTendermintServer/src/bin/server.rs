@@ -10,7 +10,7 @@
 //! this will run a client that utilizes the server in some way
 //!
 use clap::{App, Arg, ArgMatches};
-use relay_server::RelayServer;
+use relay_server::RelayApp;
 use std::io;
 use std::net::SocketAddr;
 
@@ -18,7 +18,10 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
     App::new("relay-server")
         .arg(
             Arg::with_name("address")
-                .default_value("127.0.0.1:8080")
+                // Default tendermint port
+                .long("address")
+                .short("A")
+                .default_value("127.0.0.1:26658")
                 .value_name("<HOST:PORT>"),
         )
         .arg(
@@ -41,7 +44,9 @@ fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
     let mut base_config = fern::Dispatch::new();
 
     base_config = match verbosity {
-        0 => base_config.level(log::LevelFilter::Info),
+        0 => base_config
+            .level(log::LevelFilter::Info)
+            .level_for("abci::server", log::LevelFilter::Warn), // filter out abci::server
         1 => base_config
             .level(log::LevelFilter::Debug)
             .level_for("tokio_core", log::LevelFilter::Warn) // filter out tokio
@@ -111,6 +116,5 @@ fn main() {
 
     setup_logging(verbosity).expect("failed to initialize logging.");
 
-    let server = RelayServer::new(addr);
-    server.start_server(capacity);
+    abci::run(addr, RelayApp::new(capacity));
 }

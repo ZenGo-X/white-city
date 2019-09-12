@@ -3,12 +3,11 @@
 /// server
 use std::env;
 use std::net::SocketAddr;
-use std::{thread, time};
 
-use std::sync::{Arc, Mutex};
-use tokio_core::io::Io;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::Core;
+use std::sync::Arc;
+use tokio;
+use tokio::codec::Framed;
+use tokio::net::TcpStream;
 
 use futures::sync::mpsc;
 use futures::{Future, Sink, Stream};
@@ -58,12 +57,12 @@ pub enum MessageProcessResult {
 }
 
 impl Client {
-    pub fn respond_to_server<E: 'static>(
-        &mut self,
+    pub fn respond_to_server<E: 'static + Send>(
+        &self,
         msg: ServerMessage,
         // A sender to pass messages to be written back to the server
         tx: mpsc::Sender<ClientMessage>,
-    ) -> Box<dyn Future<Item = (), Error = E>> {
+    ) -> Box<dyn Future<Item = (), Error = E> + Send> {
         let response = self.handle_server_response(&msg).unwrap();
         println!("Returning {:?}", response);
         if response.is_empty() {
@@ -74,7 +73,7 @@ impl Client {
     }
 
     pub fn handle_server_response(
-        &mut self,
+        &self,
         msg: &ServerMessage,
     ) -> Result<ClientMessage, &'static str> {
         println!("Got message from server: {:?}", msg);
@@ -119,7 +118,7 @@ impl Client {
         }
     }
 
-    pub fn generate_register_message(&mut self) -> ClientMessage {
+    pub fn generate_register_message(&self) -> ClientMessage {
         let mut msg = ClientMessage::new();
         msg.register(self.session.protocol_id.clone(), 2);
         msg
@@ -136,42 +135,44 @@ fn main() {
     let addr = addr.parse::<SocketAddr>().unwrap();
 
     // Create the event loop and initiate the connection to the remote server
-    let mut core = Core::new().unwrap();
-    let handle = core.handle();
-    let tcp = TcpStream::connect(&addr, &handle);
+    let tcp = TcpStream::connect(&addr);
 
-    let session: std::sync::Arc<std::sync::Mutex<Client>> = Arc::new(Mutex::new(Client::new()));
+    let session: Arc<Client> = Arc::new(Client::new());
 
-    let handshake = tcp.and_then(|stream| {
-        let handshake_io = stream.framed(ClientToServerCodec::new());
-        let mut client = session.lock().unwrap();
+    let client = Arc::clone(&session);
+    let handshake = tcp.and_then(move |stream| {
+        let handshake_io = Framed::new(stream, ClientToServerCodec::new(false));
         let msg = client.generate_register_message();
         handshake_io
             .send(msg)
             .map(|handshake_io| handshake_io.into_inner())
+            .map_err(|e| e.into())
     });
 
-    let client = handshake.and_then(|socket| {
-        let mut client = session.lock().unwrap();
-        let _msg = client.generate_register_message();
+    let run_client = handshake
+        .and_then(move |socket| {
+            let client = Arc::clone(&session);
+            let _msg = client.generate_register_message();
 
-        let (to_server, from_server) = socket.framed(ClientToServerCodec::new()).split();
-        let (tx, rx) = mpsc::channel(0);
-        let reader = from_server.for_each(move |msg| {
-            println!("Received {:?}", msg);
-            client.respond_to_server(msg, tx.clone())
-        });
+            let (to_server, from_server) =
+                Framed::new(socket, ClientToServerCodec::new(false)).split();
+            let (tx, rx) = mpsc::channel(0);
+            let reader = from_server.for_each(move |msg| {
+                println!("Received {:?}", msg);
+                client.respond_to_server(msg, tx.clone())
+            });
 
-        let writer = rx
-            .map_err(|()| unreachable!("rx can't fail"))
-            .fold(to_server, |to_server, msg| to_server.send(msg))
-            .map(|_| ());
+            let writer = rx
+                .map_err(|()| unreachable!("rx can't fail"))
+                .fold(to_server, |to_server, msg| to_server.send(msg))
+                .map(|_| ());
 
-        reader
-            .select(writer)
-            .map(|_| println!("Closing connection"))
-            .map_err(|(err, _)| err)
-    });
+            reader
+                .select(writer)
+                .map(|_| println!("Closing connection"))
+                .map_err(|(err, _)| err.into())
+        })
+        .map_err(|e| println!("Error: {}", e));
 
-    core.run(client).unwrap();
+    tokio::run(run_client);
 }

@@ -1,0 +1,14 @@
+{
+  "protocols":[
+    {
+      "id": 0,
+      "names": ["test-protocol"],
+      "capacities": [1, 2, 3, 4, 5, 10, 20, 50, 100]
+    },
+    {
+      "id": 1,
+      "names": ["Multi-party-eddsa","multi-party-eddsa", "multi_party_ed25519"],
+      "capacities": [1, 2, 3, 4, 5, 10, 20, 50, 64, 96,128, 256]
+    }
+  ]
+}

@@ -3,7 +3,7 @@ echo "$0: MP-EDDSA"
 #clean
 
 
-rm keys?
+rm keys??
 
 kill -9 $(lsof -t -i:8080)
 
