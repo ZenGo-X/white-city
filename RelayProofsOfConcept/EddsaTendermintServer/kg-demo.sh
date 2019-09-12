@@ -4,7 +4,7 @@ echo "$0: MP-EDDSA"
 rm keys?
 rm keys??
 
-n=1
+n=3
 
 echo "keygen part"
 for i in $(seq 1 $n);
