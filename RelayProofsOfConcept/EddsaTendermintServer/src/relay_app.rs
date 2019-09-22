@@ -123,27 +123,20 @@ impl abci::Application for RelayApp {
                 if self.can_relay(&client_message) == 0 {
                     debug!("I can relay this")
                 }
-                self.relay_session.update_stored_messages(
-                    self.relay_session.round(),
-                    peer_id,
-                    client_message,
-                );
+                let round = self.relay_session.round();
+                self.relay_session
+                    .update_stored_messages(round, peer_id, client_message);
                 let stored_messages = self.relay_session.stored_messages();
                 let mut response_vec = Vec::new();
 
-                let this_round_messages = stored_messages
-                    .messages
-                    .get(&self.relay_session.round())
-                    .unwrap();
-
-                for (_client_idx, msg) in this_round_messages.iter() {
-                    let relay_msg = msg.relay_message.as_ref().unwrap().clone();
-                    response_vec.push(relay_msg.clone());
-                }
-                if response_vec.len() == self.relay_session.protocol().capacity as usize {
-                    // resp.set_log("Some string".to_owned());
+                if stored_messages.get_number_messages(&round)
+                    == self.relay_session.protocol().capacity as usize
+                {
+                    response_vec = stored_messages.get_messages_vector_relay_message(&round);
                     resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
                     debug!("Response log {:?}", resp.log);
+                    // If received a message from each party, increase round
+                    self.relay_session.increase_step();
                 } else {
                     resp.set_log(
                         serde_json::to_string(&response_vec.clear())
@@ -153,19 +146,6 @@ impl abci::Application for RelayApp {
                 }
                 resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
                 debug!("Response log {:?}", resp.log);
-
-                if stored_messages
-                    .messages
-                    .get(&self.relay_session.round())
-                    .unwrap()
-                    .keys()
-                    .len()
-                    == self.relay_session.protocol().capacity as usize
-                {
-                    // If received a message from each party, increase round
-                    // TODO: sort efficency
-                    self.relay_session.increase_step();
-                }
             }
             _ => unimplemented!("This is not yet implemented"),
         }

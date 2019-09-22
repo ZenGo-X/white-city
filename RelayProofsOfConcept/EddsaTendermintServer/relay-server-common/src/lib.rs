@@ -146,6 +146,29 @@ impl StoredMessages {
             _ => (),
         }
     }
+
+    pub fn get_number_messages(&self, round: &u32) -> usize {
+        match self.messages.get(round) {
+            Some(messages) => return messages.keys().len(),
+            None => 0,
+        }
+    }
+
+    // Returns the messages of the current round as relay message format,
+    // or an empty vector if no messages are stored for the round
+    pub fn get_messages_vector_relay_message(&self, round: &u32) -> Vec<RelayMessage> {
+        match self.messages.get(round) {
+            Some(round_messages) => {
+                let mut response_vec = Vec::new();
+                for (_client_idx, msg) in round_messages.iter() {
+                    let relay_msg = msg.relay_message.as_ref().unwrap().clone();
+                    response_vec.push(relay_msg.clone());
+                }
+                return response_vec;
+            }
+            None => return Vec::new(),
+        }
+    }
 }
 
 #[derive(Default, Debug, Deserialize, Serialize, Clone)]
@@ -245,6 +268,16 @@ mod tests {
         let mut stored_messages = StoredMessages::new();
         stored_messages.update(1, 3, ClientMessage::new());
         stored_messages.update(1, 2, ClientMessage::new());
-        println!("{:?}", stored_messages);
+    }
+
+    #[test]
+    fn test_get_number_messages() {
+        let mut stored_messages = StoredMessages::new();
+        let round = 1;
+        stored_messages.Update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        assert_eq!(stored_messages.get_number_messages(&round), 2);
+        // Test no messages for a round where none where inserted
+        assert_eq!(stored_messages.get_number_messages(&3), 0);
     }
 }
