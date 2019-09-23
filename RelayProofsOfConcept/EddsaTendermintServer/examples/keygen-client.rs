@@ -476,13 +476,13 @@ pub enum MessageProcessResult {
 }
 
 impl SessionClient {
-    pub fn query(&self) -> Vec<RelayMessage> {
+    pub fn query(&self) -> Vec<ClientMessage> {
         let tx = "0";
         let response = self.client.abci_query(None, tx, None, false).unwrap();
         debug!("RawResponse: {:?}", response);
         let server_response = response.log;
         let empty_vec = Vec::new();
-        let server_response: Vec<RelayMessage> =
+        let server_response: Vec<ClientMessage> =
             match serde_json::from_str(&server_response.to_string()) {
                 Ok(server_response) => server_response,
                 Err(_) => empty_vec,
@@ -512,18 +512,20 @@ impl SessionClient {
         return server_response;
     }
 
-    pub fn send_message(&self, msg: ClientMessage) -> Vec<RelayMessage> {
+    pub fn send_message(&self, msg: ClientMessage) -> Vec<ClientMessage> {
         debug!("Sending message {:?}", msg);
         let tx =
             tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
         let response = self.client.broadcast_tx_commit(tx).unwrap();
         let server_response = response.clone().deliver_tx.log.unwrap();
         debug!("ServerResponse {:?}", server_response);
-        let server_response: Vec<RelayMessage> =
+        let server_response: Vec<ClientMessage> =
             serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
         return server_response;
     }
-    pub fn handle_relay_message(&mut self, msg: RelayMessage) {
+
+    pub fn handle_relay_message(&mut self, client_msg: ClientMessage) {
+        let msg = client_msg.relay_message.unwrap();
         self.state.handle_relay_message(msg.clone());
     }
 

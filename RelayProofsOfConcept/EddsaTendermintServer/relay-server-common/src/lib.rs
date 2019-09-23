@@ -169,6 +169,53 @@ impl StoredMessages {
             None => return Vec::new(),
         }
     }
+
+    // Returns the messages of the current round as client messages format,
+    // or an empty vector if no messages are stored for the round
+    pub fn get_messages_vector_client_message(&self, round: &u32) -> Vec<ClientMessage> {
+        match self.messages.get(round) {
+            Some(round_messages) => {
+                let mut response_vec = Vec::new();
+                for (_client_idx, msg) in round_messages.iter() {
+                    response_vec.push(msg.clone());
+                }
+                return response_vec;
+            }
+            None => return Vec::new(),
+        }
+    }
+
+    // Return a vector of all clients whos messages are not yet stored for a given round
+    pub fn get_missing_clients_vector(&self, round: u32, capacity: u32) -> Vec<u32> {
+        let mut return_vec = Vec::new();
+        match self.messages.get(&round) {
+            Some(keys) => {
+                return_vec = (1..capacity + 1)
+                    .filter(|x| !keys.contains_key(x))
+                    .collect();
+            }
+            None => {
+                return_vec = (1..capacity + 1).collect();
+            }
+        }
+        return_vec
+    }
+
+    // Return a vector of messages of all requested client messages in the passed vector
+    // pub fn get_missing_clients_vector(&self, round: u32, requests: Vec<u32>) -> Vec<u32> {
+    //     let mut return_vec = Vec::new();
+    //     match self.messages.get(&round) {
+    //         Some(keys) => {
+    //             return_vec = (1..capacity + 1)
+    //                 .filter(|x| !keys.contains_key(x))
+    //                 .collect();
+    //         }
+    //         None => {
+    //             return_vec = (1..capacity + 1).collect();
+    //         }
+    //     }
+    //     return_vec
+    // }
 }
 
 #[derive(Default, Debug, Deserialize, Serialize, Clone)]
@@ -274,10 +321,28 @@ mod tests {
     fn test_get_number_messages() {
         let mut stored_messages = StoredMessages::new();
         let round = 1;
-        stored_messages.Update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 3, ClientMessage::new());
         stored_messages.update(round, 2, ClientMessage::new());
         assert_eq!(stored_messages.get_number_messages(&round), 2);
         // Test no messages for a round where none where inserted
         assert_eq!(stored_messages.get_number_messages(&3), 0);
+    }
+
+    #[test]
+    fn test_get_missing_clients_vector() {
+        let mut stored_messages = StoredMessages::new();
+        let round = 1;
+        let capacity = 4;
+        stored_messages.update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        assert_eq!(
+            stored_messages.get_missing_clients_vector(round, capacity),
+            [1, 4]
+        );
+        // Test an empty round
+        assert_eq!(
+            stored_messages.get_missing_clients_vector(round + 1, capacity),
+            [1, 2, 3, 4]
+        );
     }
 }

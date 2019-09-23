@@ -132,7 +132,7 @@ impl abci::Application for RelayApp {
                 if stored_messages.get_number_messages(&round)
                     == self.relay_session.protocol().capacity as usize
                 {
-                    response_vec = stored_messages.get_messages_vector_relay_message(&round);
+                    response_vec = stored_messages.get_messages_vector_client_message(&round);
                     resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
                     debug!("Response log {:?}", resp.log);
                     // If received a message from each party, increase round
@@ -160,20 +160,17 @@ impl abci::Application for RelayApp {
         info!("Received {:?} In Query", c);
 
         // TODO: Error handle
-        let requested_stage = c.parse::<u32>().unwrap();
+        let requested_round = c.parse::<u32>().unwrap();
 
         let stored_messages = self.relay_session.stored_messages();
         let mut response_vec = Vec::new();
 
         debug!("All messages {:?}", stored_messages);
-        let this_round_messages = stored_messages.messages.get(&requested_stage).unwrap();
 
-        for (_client_idx, msg) in this_round_messages.iter() {
-            let relay_msg = msg.relay_message.as_ref().unwrap().clone();
-            debug!("Setting message {:?}", relay_msg);
-            response_vec.push(relay_msg.clone());
-        }
-        if response_vec.len() == self.relay_session.protocol().capacity as usize {
+        if stored_messages.get_number_messages(&requested_round)
+            == self.relay_session.protocol().capacity as usize
+        {
+            response_vec = stored_messages.get_messages_vector_client_message(&requested_round);
             // resp.set_log("Some string".to_owned());
             resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
             debug!("Response log {:?}", resp.log);
