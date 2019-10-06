@@ -129,10 +129,10 @@ impl abci::Application for RelayApp {
                 let stored_messages = self.relay_session.stored_messages();
                 let mut response_vec = Vec::new();
 
-                if stored_messages.get_number_messages(&round)
+                if stored_messages.get_number_messages(round)
                     == self.relay_session.protocol().capacity as usize
                 {
-                    response_vec = stored_messages.get_messages_vector_client_message(&round);
+                    response_vec = stored_messages.get_messages_vector_client_message(round);
                     resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
                     debug!("Response log {:?}", resp.log);
                     // If received a message from each party, increase round
@@ -167,10 +167,10 @@ impl abci::Application for RelayApp {
 
         debug!("All messages {:?}", stored_messages);
 
-        if stored_messages.get_number_messages(&requested_round)
+        if stored_messages.get_number_messages(requested_round)
             == self.relay_session.protocol().capacity as usize
         {
-            response_vec = stored_messages.get_messages_vector_client_message(&requested_round);
+            response_vec = stored_messages.get_messages_vector_client_message(requested_round);
             // resp.set_log("Some string".to_owned());
             resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
             debug!("Response log {:?}", resp.log);
