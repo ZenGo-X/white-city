@@ -3,15 +3,15 @@ use std::net::SocketAddr;
 use std::{thread, time};
 
 use relay_server_common::{
-    ClientMessage, MessagePayload, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage,
-    ServerMessageType, ServerResponse,
+    ClientMessage, MessagePayload, MissingMessagesRequest, PeerIdentifier, ProtocolIdentifier,
+    RelayMessage, ServerMessage, ServerMessageType, ServerResponse, StoredMessages,
 };
 
 use curv::elliptic::curves::ed25519::*;
 use curv::GE;
 use multi_party_ed25519::protocols::aggsig::{EphemeralKey, KeyAgg, KeyPair};
 use relay_server_common::common::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 
 use clap::{App, Arg, ArgMatches};
@@ -164,6 +164,10 @@ impl Peer for EddsaPeer {
         return self.pk_msg.clone();
     }
 
+    fn current_step(&self) -> u32 {
+        self.current_step
+    }
+
     fn do_step(&mut self) {
         debug!("Current step is: {:}", self.current_step);
         if self.is_step_done() {
@@ -228,6 +232,7 @@ impl Peer for EddsaPeer {
 pub trait Peer {
     fn new(capacity: u32) -> Self;
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload>;
+    fn current_step(&self) -> u32;
     fn do_step(&mut self);
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload);
     fn get_next_item(&mut self) -> Option<MessagePayload>;
@@ -339,6 +344,7 @@ where
     pub data_manager: ProtocolDataManager<T>,
     pub last_message: ClientMessage,
     pub bc_dests: Vec<ProtocolIdentifier>,
+    pub stored_messages: StoredMessages,
 }
 
 impl<T: Peer> State<T> {
@@ -354,6 +360,7 @@ impl<T: Peer> State<T> {
             last_message: ClientMessage::new(),
             bc_dests: (1..(capacity + 1)).collect(),
             data_manager: data_m,
+            stored_messages: StoredMessages::new(),
         }
     }
 }
@@ -476,16 +483,33 @@ pub enum MessageProcessResult {
 }
 
 impl SessionClient {
-    pub fn query(&self) -> Vec<ClientMessage> {
-        let tx = "0";
+    pub fn query(&self) -> BTreeMap<u32, ClientMessage> {
+        let current_step = self.state.data_manager.data_holder.current_step();
+        println!("Current step {}", current_step);
+        let capacity = self.state.data_manager.capacity;
+        println!("Capacity {}", capacity);
+        let missing_clients = self
+            .state
+            .stored_messages
+            .get_missing_clients_vector(current_step, capacity);
+        println!("Missing: {:?}", missing_clients);
+        // No need to query if nothing is missing
+        if missing_clients.is_empty() {
+            return BTreeMap::new();
+        }
+
+        let request = MissingMessagesRequest {
+            round: current_step,
+            missing_clients: missing_clients,
+        };
+        let tx = serde_json::to_string(&request).unwrap();
         let response = self.client.abci_query(None, tx, None, false).unwrap();
-        debug!("RawResponse: {:?}", response);
+        println!("RawResponse: {:?}", response);
         let server_response = response.log;
-        let empty_vec = Vec::new();
-        let server_response: Vec<ClientMessage> =
+        let server_response: BTreeMap<u32, ClientMessage> =
             match serde_json::from_str(&server_response.to_string()) {
                 Ok(server_response) => server_response,
-                Err(_) => empty_vec,
+                Err(_) => BTreeMap::new(),
             };
         return server_response;
     }
@@ -512,16 +536,26 @@ impl SessionClient {
         return server_response;
     }
 
-    pub fn send_message(&self, msg: ClientMessage) -> Vec<ClientMessage> {
+    pub fn send_message(&self, msg: ClientMessage) -> BTreeMap<u32, ClientMessage> {
         debug!("Sending message {:?}", msg);
         let tx =
             tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
         let response = self.client.broadcast_tx_commit(tx).unwrap();
         let server_response = response.clone().deliver_tx.log.unwrap();
         debug!("ServerResponse {:?}", server_response);
-        let server_response: Vec<ClientMessage> =
+        let server_response: BTreeMap<u32, ClientMessage> =
             serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
         return server_response;
+    }
+
+    // Stores the server response to the stored messages
+    pub fn store_server_response(&mut self, messages: &BTreeMap<u32, ClientMessage>) {
+        let round = self.state.data_manager.current_step;
+        for (client_idx, msg) in messages {
+            self.state
+                .stored_messages
+                .update(round, *client_idx, msg.clone());
+        }
     }
 
     pub fn handle_relay_message(&mut self, client_msg: ClientMessage) {
@@ -623,22 +657,27 @@ fn main() {
     debug!("Next message: {:?}", next_message);
     // TODO The client/server response could be an error
     let server_response = session.send_message(next_message.unwrap());
+    session.store_server_response(&server_response);
+
     debug!("Server Response: {:?}", server_response);
-    //session.query();
-    if server_response.len() == capacity as usize {
-        for msg in server_response {
-            session.handle_relay_message(msg.clone());
-        }
-    } else {
-        loop {
-            let server_response = session.query();
-            thread::sleep(time::Duration::from_millis(100));
-            if server_response.len() == capacity as usize {
-                for msg in server_response {
-                    session.handle_relay_message(msg.clone());
-                }
-                return;
+
+    loop {
+        let round = session.state.data_manager.current_step;
+        if session.state.stored_messages.get_number_messages(round) == capacity as usize {
+            for msg in session
+                .state
+                .stored_messages
+                .get_messages_vector_client_message(round)
+            {
+                session.handle_relay_message(msg.clone());
             }
+            return;
         }
+        let server_response = session.query();
+        // println!("Server response {:?}", server_response);
+        // println!("Server response len {}", server_response.keys().len());
+        session.store_server_response(&server_response);
+        thread::sleep(time::Duration::from_millis(100));
+        // println!("All stored messages {:?}", session.state.stored_messages);
     }
 }

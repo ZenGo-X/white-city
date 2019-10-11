@@ -5,7 +5,9 @@ use abci::{
 };
 use log::{debug, info, warn};
 use relay_server_common::protocol::ProtocolDescriptor;
-use relay_server_common::{ClientMessage, ClientMessageType, ServerMessage, ServerResponse};
+use relay_server_common::{
+    ClientMessage, ClientMessageType, MissingMessagesRequest, ServerMessage, ServerResponse,
+};
 
 pub struct RelayApp {
     relay_session: RelaySession,
@@ -127,24 +129,22 @@ impl abci::Application for RelayApp {
                 self.relay_session
                     .update_stored_messages(round, peer_id, client_message);
                 let stored_messages = self.relay_session.stored_messages();
-                let mut response_vec = Vec::new();
 
+                let response = stored_messages.get_messages_map_client_message(round);
+                resp.set_log(serde_json::to_string(&response).unwrap().to_owned());
+                debug!("Response log {:?}", resp.log);
+                info!(
+                    "Number of stored messages in round {}: {}",
+                    round,
+                    stored_messages.get_number_messages(round)
+                );
+                // If received a message from each party, increase round
                 if stored_messages.get_number_messages(round)
                     == self.relay_session.protocol().capacity as usize
                 {
-                    response_vec = stored_messages.get_messages_vector_client_message(round);
-                    resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
-                    debug!("Response log {:?}", resp.log);
-                    // If received a message from each party, increase round
                     self.relay_session.increase_step();
-                } else {
-                    resp.set_log(
-                        serde_json::to_string(&response_vec.clear())
-                            .unwrap()
-                            .to_owned(),
-                    );
+                    debug!("Increasing step");
                 }
-                resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
                 debug!("Response log {:?}", resp.log);
             }
             _ => unimplemented!("This is not yet implemented"),
@@ -156,31 +156,29 @@ impl abci::Application for RelayApp {
     fn query(&mut self, req: &RequestQuery) -> ResponseQuery {
         let mut resp = ResponseQuery::new();
 
-        let c = convert_tx(&req.data);
-        info!("Received {:?} In Query", c);
+        let missing_messages: MissingMessagesRequest = serde_json::from_slice(&req.data).unwrap();
+        info!("Received {:?} In Query", missing_messages);
 
         // TODO: Error handle
-        let requested_round = c.parse::<u32>().unwrap();
+        let requested_round = missing_messages.round;
+        let mut missing_clients = missing_messages.missing_clients;
+        info!("Requested round {}", requested_round);
 
         let stored_messages = self.relay_session.stored_messages();
-        let mut response_vec = Vec::new();
 
-        debug!("All messages {:?}", stored_messages);
+        // info!("All messages {:?}", stored_messages);
 
-        if stored_messages.get_number_messages(requested_round)
-            == self.relay_session.protocol().capacity as usize
-        {
-            response_vec = stored_messages.get_messages_vector_client_message(requested_round);
-            // resp.set_log("Some string".to_owned());
-            resp.set_log(serde_json::to_string(&response_vec).unwrap().to_owned());
-            debug!("Response log {:?}", resp.log);
-        } else {
-            resp.set_log(
-                serde_json::to_string(&response_vec.clear())
-                    .unwrap()
-                    .to_owned(),
-            );
+        // TODO: Limit to 50 messages to make sure there are not crashes
+        if missing_clients.len() > 12 {
+            missing_clients.truncate(12);
         }
+        let response =
+            stored_messages.get_messages_map_from_vector(requested_round, &missing_clients);
+
+        info!("Server response {:?}", response);
+
+        resp.set_log(serde_json::to_string(&response).unwrap().to_owned());
+        info!("Response log {:?}", resp.log);
 
         resp.set_code(0);
         resp.set_index(-1);

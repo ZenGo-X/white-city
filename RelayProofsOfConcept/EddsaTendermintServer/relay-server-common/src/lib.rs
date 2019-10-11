@@ -198,6 +198,29 @@ impl StoredMessages {
         }
     }
 
+    // Returns the messages of the current round as client messages format,
+    // or an empty hashmap if no messages are stored for the round
+    pub fn get_messages_map_from_vector(
+        &self,
+        round: u32,
+        missing_clients: &[u32],
+    ) -> BTreeMap<u32, ClientMessage> {
+        match self.messages.get(&round) {
+            Some(round_messages) => {
+                // TODO: Rewrite with filter and iterator
+                let mut response_vec = BTreeMap::new();
+                for (client_idx, msg) in round_messages.iter() {
+                    let idx = *client_idx as u32;
+                    if missing_clients.contains(&idx) {
+                        response_vec.insert(idx, msg.clone());
+                    }
+                }
+                return response_vec;
+            }
+            None => return BTreeMap::new(),
+        }
+    }
+
     // Return a vector of all clients whos messages are not yet stored for a given round
     pub fn get_missing_clients_vector(&self, round: u32, capacity: u32) -> Vec<u32> {
         let return_vec;
@@ -364,5 +387,18 @@ mod tests {
             assert_eq!(i, idx);
             i += 2;
         }
+    }
+
+    #[test]
+    fn test_get_messages_from_vector() {
+        let mut stored_messages = StoredMessages::new();
+        let round = 1;
+        stored_messages.update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        // Assert all messages are stored in order of round and client
+        println!(
+            "Stored {:?}",
+            stored_messages.get_messages_map_from_vector(round, &[2])
+        );
     }
 }
