@@ -239,6 +239,18 @@ impl RelaySession {
     pub fn stored_messages(&self) -> StoredMessages {
         self.stored_messages.read().unwrap().clone()
     }
+
+    pub fn try_increase_round(&self, capacity: u32) {
+        if self
+            .stored_messages
+            .read()
+            .unwrap()
+            .get_number_messages(self.round.read().unwrap().clone())
+            == capacity as usize
+        {
+            *self.round.write().unwrap() += 1;
+        }
+    }
 }
 
 #[cfg(test)]

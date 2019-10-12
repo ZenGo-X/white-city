@@ -9,6 +9,8 @@ use relay_server_common::{
     ClientMessage, ClientMessageType, MissingMessagesRequest, ServerMessage, ServerResponse,
 };
 
+const MAX_CLIENTS: usize = 12;
+
 pub struct RelayApp {
     relay_session: RelaySession,
 }
@@ -128,23 +130,17 @@ impl abci::Application for RelayApp {
                 let round = self.relay_session.round();
                 self.relay_session
                     .update_stored_messages(round, peer_id, client_message);
-                let stored_messages = self.relay_session.stored_messages();
+                info!("Stored message of client {}", peer_id);
 
-                let response = stored_messages.get_messages_map_client_message(round);
+                let response = self
+                    .relay_session
+                    .stored_messages()
+                    .get_messages_map_client_message(round);
                 resp.set_log(serde_json::to_string(&response).unwrap().to_owned());
                 debug!("Response log {:?}", resp.log);
-                info!(
-                    "Number of stored messages in round {}: {}",
-                    round,
-                    stored_messages.get_number_messages(round)
-                );
+                self.relay_session
+                    .try_increase_round(self.relay_session.protocol().capacity);
                 // If received a message from each party, increase round
-                if stored_messages.get_number_messages(round)
-                    == self.relay_session.protocol().capacity as usize
-                {
-                    self.relay_session.increase_step();
-                    debug!("Increasing step");
-                }
                 debug!("Response log {:?}", resp.log);
             }
             _ => unimplemented!("This is not yet implemented"),
@@ -166,14 +162,16 @@ impl abci::Application for RelayApp {
 
         let stored_messages = self.relay_session.stored_messages();
 
-        // info!("All messages {:?}", stored_messages);
-
-        // TODO: Limit to 50 messages to make sure there are not crashes
-        if missing_clients.len() > 12 {
-            missing_clients.truncate(12);
+        if missing_clients.len() > MAX_CLIENTS {
+            missing_clients.truncate(MAX_CLIENTS);
         }
         let response =
             stored_messages.get_messages_map_from_vector(requested_round, &missing_clients);
+
+        match stored_messages.messages.get(&1) {
+            Some(test) => info!("Stored messages in round 1: {:?}", test),
+            None => {}
+        }
 
         info!("Server response {:?}", response);
 

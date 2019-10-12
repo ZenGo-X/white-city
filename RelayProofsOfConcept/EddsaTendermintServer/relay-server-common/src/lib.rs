@@ -11,6 +11,8 @@ pub type ProtocolIdentifier = u32;
 pub type PeerIdentifier = u32;
 pub type MessagePayload = String;
 
+const MAX_CLIENTS: u32 = 12;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelayMessage {
     pub peer_number: PeerIdentifier,
@@ -187,12 +189,18 @@ impl StoredMessages {
     pub fn get_messages_map_client_message(&self, round: u32) -> BTreeMap<u32, ClientMessage> {
         match self.messages.get(&round) {
             Some(round_messages) => {
-                let mut response_vec = BTreeMap::new();
+                let mut response = BTreeMap::new();
+                // Only return a response on the first MAX clients
+                let mut max_counter = 0;
                 for (client_idx, msg) in round_messages.iter() {
                     let idx = *client_idx as u32;
-                    response_vec.insert(idx, msg.clone());
+                    response.insert(idx, msg.clone());
+                    max_counter += 1;
+                    if max_counter > MAX_CLIENTS {
+                        break;
+                    }
                 }
-                return response_vec;
+                return response;
             }
             None => return BTreeMap::new(),
         }
@@ -387,6 +395,29 @@ mod tests {
             assert_eq!(i, idx);
             i += 2;
         }
+        // Test for more that MAX clients
+        let mut stored_messages = StoredMessages::new();
+        stored_messages.update(round, 1, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        stored_messages.update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 4, ClientMessage::new());
+        stored_messages.update(round, 5, ClientMessage::new());
+        stored_messages.update(round, 6, ClientMessage::new());
+        stored_messages.update(round, 7, ClientMessage::new());
+        stored_messages.update(round, 8, ClientMessage::new());
+        stored_messages.update(round, 9, ClientMessage::new());
+        stored_messages.update(round, 10, ClientMessage::new());
+        stored_messages.update(round, 11, ClientMessage::new());
+        stored_messages.update(round, 12, ClientMessage::new());
+        stored_messages.update(round, 13, ClientMessage::new());
+        stored_messages.update(round, 14, ClientMessage::new());
+        assert_eq!(
+            stored_messages
+                .get_messages_map_client_message(round)
+                .into_iter()
+                .len(),
+            13
+        );
     }
 
     #[test]

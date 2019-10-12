@@ -8,7 +8,7 @@
     {
       "id": 1,
       "names": ["Multi-party-eddsa","multi-party-eddsa", "multi_party_ed25519"],
-      "capacities": [1, 2, 3, 4, 5, 10, 20, 50, 64, 96, 100, 128, 256]
+      "capacities": [1, 2, 3, 4, 5, 10, 16, 20, 32, 50, 64, 96, 100, 128, 255, 256, 512]
     }
   ]
 }

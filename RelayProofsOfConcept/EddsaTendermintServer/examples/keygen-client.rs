@@ -16,6 +16,8 @@ use std::fs;
 
 use clap::{App, Arg, ArgMatches};
 
+const MAX_CLIENTS: usize = 12;
+
 #[allow(non_snake_case)]
 struct EddsaPeer {
     // this peers identifier in this session
@@ -243,7 +245,6 @@ pub trait Peer {
 struct ProtocolDataManager<T: Peer> {
     pub peer_id: PeerIdentifier,
     pub capacity: u32,
-    pub current_step: u32,
     pub data_holder: T, // will be filled when initializing, and on each new step
     pub client_data: Option<MessagePayload>, // new data calculated by this peer at the beginning of a step (that needs to be sent to other peers)
     pub new_client_data: bool,
@@ -256,7 +257,6 @@ impl<T: Peer> ProtocolDataManager<T> {
     {
         ProtocolDataManager {
             peer_id: 0,
-            current_step: 0,
             capacity,
             data_holder: Peer::new(capacity),
             client_data: None,
@@ -488,15 +488,22 @@ impl SessionClient {
         println!("Current step {}", current_step);
         let capacity = self.state.data_manager.capacity;
         println!("Capacity {}", capacity);
-        let missing_clients = self
+        let mut missing_clients = self
             .state
             .stored_messages
             .get_missing_clients_vector(current_step, capacity);
+
         println!("Missing: {:?}", missing_clients);
+
         // No need to query if nothing is missing
         if missing_clients.is_empty() {
             return BTreeMap::new();
         }
+
+        if missing_clients.len() > MAX_CLIENTS {
+            missing_clients.truncate(MAX_CLIENTS);
+        }
+        println!("Missing requested: {:?}", missing_clients);
 
         let request = MissingMessagesRequest {
             round: current_step,
@@ -550,7 +557,7 @@ impl SessionClient {
 
     // Stores the server response to the stored messages
     pub fn store_server_response(&mut self, messages: &BTreeMap<u32, ClientMessage>) {
-        let round = self.state.data_manager.current_step;
+        let round = self.state.data_manager.data_holder.current_step();
         for (client_idx, msg) in messages {
             self.state
                 .stored_messages
@@ -662,7 +669,7 @@ fn main() {
     debug!("Server Response: {:?}", server_response);
 
     loop {
-        let round = session.state.data_manager.current_step;
+        let round = session.state.data_manager.data_holder.current_step();
         if session.state.stored_messages.get_number_messages(round) == capacity as usize {
             for msg in session
                 .state
