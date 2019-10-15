@@ -9,7 +9,7 @@ use relay_server_common::{
 
 use curv::elliptic::curves::ed25519::*;
 use curv::GE;
-use multi_party_ed25519::protocols::aggsig::{EphemeralKey, KeyAgg, KeyPair};
+use multi_party_eddsa::protocols::aggsig::{EphemeralKey, KeyAgg, KeyPair};
 use relay_server_common::common::*;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;

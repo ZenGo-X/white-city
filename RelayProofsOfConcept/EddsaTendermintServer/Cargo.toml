@@ -17,10 +17,13 @@ better-panic = "0.1.2"
 
 relay-server-common = { path = "../EddsaTendermintServer/relay-server-common" }
 
-multi-party-ed25519 = { git = "https://github.com/KZen-networks/multi-party-eddsa" }
+[dependencies.multi-party-eddsa]
+git = "https://github.com/KZen-networks/multi-party-eddsa"
+tag = "v0.2.1"
 
 [dependencies.curv]
 git = "https://github.com/KZen-networks/curv"
+tag = "v0.2.0-ed25519"
 features=["ec_ed25519"]
 
 [dependencies.abci]
