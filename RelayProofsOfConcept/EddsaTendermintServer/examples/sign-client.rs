@@ -17,7 +17,7 @@ use curv::elliptic::curves::ed25519::*;
 use curv::elliptic::curves::traits::ECPoint;
 use curv::elliptic::curves::traits::ECScalar;
 use curv::{BigInt, FE, GE};
-use multi_party_ed25519::protocols::aggsig::{
+use multi_party_eddsa::protocols::aggsig::{
     test_com, verify, EphemeralKey, KeyAgg, KeyPair, SignFirstMsg, SignSecondMsg, Signature,
 };
 
