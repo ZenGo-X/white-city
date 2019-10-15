@@ -8,8 +8,8 @@ use std::vec::Vec;
 use std::{thread, time};
 
 use relay_server_common::{
-    ClientMessage, MessagePayload, PeerIdentifier, ProtocolIdentifier, RelayMessage, ServerMessage,
-    ServerMessageType, ServerResponse,
+    ClientMessage, MessagePayload, MissingMessagesRequest, PeerIdentifier, ProtocolIdentifier,
+    RelayMessage, ServerMessage, ServerMessageType, ServerResponse, StoredMessages,
 };
 
 use curv::arithmetic::traits::Converter;
@@ -23,10 +23,12 @@ use multi_party_eddsa::protocols::aggsig::{
 
 use relay_server_common::common::*;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 
 use clap::{App, Arg, ArgMatches};
+
+const MAX_CLIENTS: usize = 12;
 
 #[allow(non_snake_case)]
 struct EddsaPeer {
@@ -501,12 +503,12 @@ impl Peer for EddsaPeer {
 pub trait Peer {
     fn new(capacity: u32, _message: Vec<u8>, index: u32) -> Self;
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload>;
+    fn current_step(&self) -> u32;
     fn do_step(&mut self);
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload);
     fn get_next_item(&mut self) -> Option<MessagePayload>;
     fn finalize(&mut self) -> Result<(), &'static str>;
     fn is_done(&mut self) -> bool;
-    fn current_step(&self) -> u32;
 }
 
 struct ProtocolDataManager<T: Peer> {
@@ -619,6 +621,7 @@ where
     pub data_manager: ProtocolDataManager<T>,
     pub last_message: RefCell<ClientMessage>,
     pub bc_dests: Vec<ProtocolIdentifier>,
+    pub stored_messages: StoredMessages,
     pub timeout: u32,
 }
 
@@ -643,6 +646,7 @@ impl<T: Peer> State<T> {
             bc_dests: (1..(capacity + 1)).collect(),
             timeout: 100, // 3 second delay in sending messages
             data_manager: data_m,
+            stored_messages: StoredMessages::new(),
         }
     }
 }
@@ -765,21 +769,40 @@ pub enum MessageProcessResult {
 }
 
 impl SessionClient {
-    pub fn query(&self) -> Vec<RelayMessage> {
-        let tx = self.state.data_manager.data_holder.current_step();
-        println!("Requesting messages for step {:?}", tx);
-        let response = self
-            .client
-            .abci_query(None, tx.to_string(), None, false)
-            .unwrap();
+    pub fn query(&self) -> BTreeMap<u32, ClientMessage> {
+        let current_step = self.state.data_manager.data_holder.current_step();
+        println!("Current step {}", current_step);
+        let capacity = self.state.data_manager.capacity;
+        println!("Capacity {}", capacity);
+        let mut missing_clients = self
+            .state
+            .stored_messages
+            .get_missing_clients_vector(current_step, capacity);
+
+        println!("Missing: {:?}", missing_clients);
+
+        // No need to query if nothing is missing
+        if missing_clients.is_empty() {
+            return BTreeMap::new();
+        }
+
+        if missing_clients.len() > MAX_CLIENTS {
+            missing_clients.truncate(MAX_CLIENTS);
+        }
+        println!("Missing requested: {:?}", missing_clients);
+
+        let request = MissingMessagesRequest {
+            round: current_step,
+            missing_clients: missing_clients,
+        };
+        let tx = serde_json::to_string(&request).unwrap();
+        let response = self.client.abci_query(None, tx, None, false).unwrap();
         println!("RawResponse: {:?}", response);
         let server_response = response.log;
-        println!("ServerResponseLog {:?}", server_response);
-        let empty_vec = Vec::new();
-        let server_response: Vec<RelayMessage> =
+        let server_response: BTreeMap<u32, ClientMessage> =
             match serde_json::from_str(&server_response.to_string()) {
                 Ok(server_response) => server_response,
-                Err(_) => empty_vec,
+                Err(_) => BTreeMap::new(),
             };
         return server_response;
     }
@@ -812,19 +835,30 @@ impl SessionClient {
         return server_response;
     }
 
-    pub fn send_message(&self, msg: ClientMessage) -> Vec<RelayMessage> {
+    pub fn send_message(&self, msg: ClientMessage) -> BTreeMap<u32, ClientMessage> {
         println!("Sending message {:?}", msg);
         let tx =
             tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
         let response = self.client.broadcast_tx_commit(tx).unwrap();
         let server_response = response.clone().deliver_tx.log.unwrap();
         println!("ServerResponse {:?}", server_response);
-        let server_response: Vec<RelayMessage> =
+        let server_response: BTreeMap<u32, ClientMessage> =
             serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
         return server_response;
     }
 
-    pub fn handle_relay_message(&mut self, msg: RelayMessage) -> Option<ClientMessage> {
+    // Stores the server response to the stored messages
+    pub fn store_server_response(&mut self, messages: &BTreeMap<u32, ClientMessage>) {
+        let round = self.state.data_manager.data_holder.current_step();
+        for (client_idx, msg) in messages {
+            self.state
+                .stored_messages
+                .update(round, *client_idx, msg.clone());
+        }
+    }
+
+    pub fn handle_relay_message(&mut self, client_msg: ClientMessage) -> Option<ClientMessage> {
+        let msg = client_msg.relay_message.unwrap();
         let mut new_message = Some(ClientMessage::new());
         let next = self.state.handle_relay_message(msg.clone());
         println!("Next {:?}", next);
@@ -954,42 +988,33 @@ fn main() {
     println!("Next message: {:?}", next_message);
     // TODO The client/server response could be an error
     let mut server_response = session.send_message(next_message.clone().unwrap());
-    println!("Server Response: {:?}", server_response);
-    // TODO: as many steps as there are in the protocol
-    'outer: for _ in 0..3 {
-        if server_response.len() == capacity as usize {
-            for msg in server_response.clone() {
-                next_message = session.handle_relay_message(msg.clone());
-            }
-            server_response = session.send_message(next_message.clone().unwrap());
-        } else {
-            'inner: loop {
-                server_response = session.query();
-                thread::sleep(time::Duration::from_millis(500));
-                if server_response.len() == capacity as usize {
-                    for msg in server_response.clone() {
-                        next_message = session.handle_relay_message(msg.clone());
-                    }
+    session.store_server_response(&server_response);
+    // Number of rounds in signing
+    let rounds = 4;
+    'outer: for _ in 0..rounds {
+        'inner: loop {
+            let round = session.state.data_manager.data_holder.current_step();
+            if session.state.stored_messages.get_number_messages(round) == capacity as usize {
+                for msg in session
+                    .state
+                    .stored_messages
+                    .get_messages_vector_client_message(round)
+                {
+                    next_message = session.handle_relay_message(msg.clone());
+                }
+                // Do not send response on last round
+                if round != rounds - 1 {
                     server_response = session.send_message(next_message.clone().unwrap());
-                    break 'inner;
+                    session.store_server_response(&server_response);
                 }
-            }
-        }
-    }
-    // For the last iteration, no need to send server messages again
-    if server_response.len() == capacity as usize {
-        for msg in server_response.clone() {
-            session.handle_relay_message(msg.clone());
-        }
-    } else {
-        loop {
-            server_response = session.query();
-            thread::sleep(time::Duration::from_millis(500));
-            if server_response.len() == capacity as usize {
-                for msg in server_response.clone() {
-                    session.handle_relay_message(msg.clone());
-                }
-                break;
+                break 'inner;
+            } else {
+                let server_response = session.query();
+                // println!("Server response {:?}", server_response);
+                // println!("Server response len {}", server_response.keys().len());
+                session.store_server_response(&server_response);
+                thread::sleep(time::Duration::from_millis(100));
+                // println!("All stored messages {:?}", session.state.stored_messages);
             }
         }
     }

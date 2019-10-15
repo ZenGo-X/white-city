@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::vec::Vec;
 use tokio_jsoncodec::Codec as JsonCodec;
@@ -10,6 +10,8 @@ pub mod protocol;
 pub type ProtocolIdentifier = u32;
 pub type PeerIdentifier = u32;
 pub type MessagePayload = String;
+
+const MAX_CLIENTS: u32 = 12;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelayMessage {
@@ -100,6 +102,17 @@ pub struct ServerMessage {
     pub relay_message: Option<RelayMessage>,
 }
 
+#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+pub struct MissingMessagesRequest {
+    pub round: u32,
+    pub missing_clients: Vec<u32>,
+}
+
+#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+pub struct MissingMessagesReply {
+    pub missing_messages: BTreeMap<u32, ClientMessage>,
+}
+
 impl ServerMessage {
     pub fn new() -> ServerMessage {
         ServerMessage {
@@ -127,24 +140,109 @@ impl ServerMessage {
 
 #[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub struct StoredMessages {
-    pub messages: HashMap<u32, HashMap<u32, ClientMessage>>,
+    pub messages: BTreeMap<u32, BTreeMap<u32, ClientMessage>>,
 }
 
 impl StoredMessages {
     pub fn new() -> StoredMessages {
         StoredMessages {
-            messages: HashMap::new(),
+            messages: BTreeMap::new(),
         }
     }
 
+    // Insert a new ClientMessage for a given round, and a given party
     pub fn update(&mut self, round: u32, party: u32, msg: ClientMessage) {
-        self.messages.entry(round).or_insert(HashMap::new());
+        self.messages.entry(round).or_insert(BTreeMap::new());
         match self.messages.get_mut(&round) {
             Some(messages) => {
                 messages.insert(party, msg.clone());
             }
             _ => (),
         }
+    }
+
+    // Return the current number of stored messages
+    pub fn get_number_messages(&self, round: u32) -> usize {
+        match self.messages.get(&round) {
+            Some(messages) => return messages.keys().len(),
+            None => 0,
+        }
+    }
+
+    // Returns the messages of the current round as client messages format,
+    // or an empty vector if no messages are stored for the round
+    pub fn get_messages_vector_client_message(&self, round: u32) -> Vec<ClientMessage> {
+        match self.messages.get(&round) {
+            Some(round_messages) => {
+                let mut response_vec = Vec::new();
+                for (_client_idx, msg) in round_messages.iter() {
+                    response_vec.push(msg.clone());
+                }
+                return response_vec;
+            }
+            None => return Vec::new(),
+        }
+    }
+
+    // Returns the messages of the current round as client messages format,
+    // or an empty hashmap if no messages are stored for the round
+    pub fn get_messages_map_client_message(&self, round: u32) -> BTreeMap<u32, ClientMessage> {
+        match self.messages.get(&round) {
+            Some(round_messages) => {
+                let mut response = BTreeMap::new();
+                // Only return a response on the first MAX clients
+                let mut max_counter = 0;
+                for (client_idx, msg) in round_messages.iter() {
+                    let idx = *client_idx as u32;
+                    response.insert(idx, msg.clone());
+                    max_counter += 1;
+                    if max_counter > MAX_CLIENTS {
+                        break;
+                    }
+                }
+                return response;
+            }
+            None => return BTreeMap::new(),
+        }
+    }
+
+    // Returns the messages of the current round as client messages format,
+    // or an empty hashmap if no messages are stored for the round
+    pub fn get_messages_map_from_vector(
+        &self,
+        round: u32,
+        missing_clients: &[u32],
+    ) -> BTreeMap<u32, ClientMessage> {
+        match self.messages.get(&round) {
+            Some(round_messages) => {
+                // TODO: Rewrite with filter and iterator
+                let mut response_vec = BTreeMap::new();
+                for (client_idx, msg) in round_messages.iter() {
+                    let idx = *client_idx as u32;
+                    if missing_clients.contains(&idx) {
+                        response_vec.insert(idx, msg.clone());
+                    }
+                }
+                return response_vec;
+            }
+            None => return BTreeMap::new(),
+        }
+    }
+
+    // Return a vector of all clients whos messages are not yet stored for a given round
+    pub fn get_missing_clients_vector(&self, round: u32, capacity: u32) -> Vec<u32> {
+        let return_vec;
+        match self.messages.get(&round) {
+            Some(keys) => {
+                return_vec = (1..capacity + 1)
+                    .filter(|x| !keys.contains_key(x))
+                    .collect();
+            }
+            None => {
+                return_vec = (1..capacity + 1).collect();
+            }
+        }
+        return_vec
     }
 }
 
@@ -245,6 +343,93 @@ mod tests {
         let mut stored_messages = StoredMessages::new();
         stored_messages.update(1, 3, ClientMessage::new());
         stored_messages.update(1, 2, ClientMessage::new());
-        println!("{:?}", stored_messages);
+    }
+
+    #[test]
+    fn test_get_number_messages() {
+        let mut stored_messages = StoredMessages::new();
+        let round = 1;
+        stored_messages.update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        assert_eq!(stored_messages.get_number_messages(round), 2);
+        // Test no messages for a round where none where inserted
+        assert_eq!(stored_messages.get_number_messages(3), 0);
+    }
+
+    #[test]
+    fn test_get_missing_clients_vector() {
+        let mut stored_messages = StoredMessages::new();
+        let round = 1;
+        let capacity = 4;
+        stored_messages.update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        assert_eq!(
+            stored_messages.get_missing_clients_vector(round, capacity),
+            [1, 4]
+        );
+        // Test an empty round
+        assert_eq!(
+            stored_messages.get_missing_clients_vector(round + 1, capacity),
+            [1, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    fn test_get_messages_map_client_message() {
+        let mut stored_messages = StoredMessages::new();
+        let round = 1;
+        stored_messages.update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        let mut i: u32 = 2;
+        // Assert all messages are stored in order of round and client
+        for (idx, _) in stored_messages.get_messages_map_client_message(round) {
+            assert_eq!(i, idx);
+            i += 1;
+        }
+        // Assert sorted order for non sequential client messages
+        let mut stored_messages = StoredMessages::new();
+        stored_messages.update(round, 4, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        let mut i: u32 = 2;
+        for (idx, _) in stored_messages.get_messages_map_client_message(round) {
+            assert_eq!(i, idx);
+            i += 2;
+        }
+        // Test for more that MAX clients
+        let mut stored_messages = StoredMessages::new();
+        stored_messages.update(round, 1, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        stored_messages.update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 4, ClientMessage::new());
+        stored_messages.update(round, 5, ClientMessage::new());
+        stored_messages.update(round, 6, ClientMessage::new());
+        stored_messages.update(round, 7, ClientMessage::new());
+        stored_messages.update(round, 8, ClientMessage::new());
+        stored_messages.update(round, 9, ClientMessage::new());
+        stored_messages.update(round, 10, ClientMessage::new());
+        stored_messages.update(round, 11, ClientMessage::new());
+        stored_messages.update(round, 12, ClientMessage::new());
+        stored_messages.update(round, 13, ClientMessage::new());
+        stored_messages.update(round, 14, ClientMessage::new());
+        assert_eq!(
+            stored_messages
+                .get_messages_map_client_message(round)
+                .into_iter()
+                .len(),
+            13
+        );
+    }
+
+    #[test]
+    fn test_get_messages_from_vector() {
+        let mut stored_messages = StoredMessages::new();
+        let round = 1;
+        stored_messages.update(round, 3, ClientMessage::new());
+        stored_messages.update(round, 2, ClientMessage::new());
+        // Assert all messages are stored in order of round and client
+        println!(
+            "Stored {:?}",
+            stored_messages.get_messages_map_from_vector(round, &[2])
+        );
     }
 }
