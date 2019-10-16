@@ -16,7 +16,7 @@ pub enum MessagePayloadType {
 }
 
 pub trait Peer {
-    fn new(capacity: u32) -> Self;
+    fn new(capacity: u32, message: Vec<u8>, index: u32) -> Self;
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload>;
     fn current_step(&self) -> u32;
     fn do_step(&mut self);

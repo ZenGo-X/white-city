@@ -4,7 +4,7 @@ use std::{thread, time};
 use clap::{App, Arg, ArgMatches};
 use log::debug;
 
-use mmpc_client::eddsa_peer::EddsaPeer;
+use mmpc_client::eddsa_peer_kg::EddsaPeer;
 use mmpc_client::tendermint_client::SessionClient;
 
 fn arg_matches<'a>() -> ArgMatches<'a> {
@@ -70,8 +70,13 @@ fn main() {
     let port = 8080 + index;
     let proxy_addr = format!("tcp://{}", proxy);
     let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
-    let mut session: SessionClient<EddsaPeer> =
-        SessionClient::new(client_addr, &proxy_addr.parse().unwrap(), capacity);
+    let mut session: SessionClient<EddsaPeer> = SessionClient::new(
+        client_addr,
+        &proxy_addr.parse().unwrap(),
+        capacity,
+        index,
+        Vec::new(),
+    );
     let server_response = session.register(index, capacity);
     let next_message = session.generate_client_answer(server_response);
     debug!("Next message: {:?}", next_message);

@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 
-use crate::eddsa_peer::ProtocolDataManager;
 use crate::peer::{Peer, MAX_CLIENTS};
 use log::{debug, error, info, warn};
 
@@ -23,11 +22,13 @@ impl<T: Peer> SessionClient<T> {
     pub fn new(
         client_addr: SocketAddr,
         server_addr: &tendermint::net::Address,
+        client_index: u32,
         capacity: u32,
+        message: Vec<u8>,
     ) -> SessionClient<T> {
         let protocol_id = 1;
         SessionClient {
-            state: State::new(protocol_id, capacity, client_addr),
+            state: State::new(protocol_id, capacity, client_addr, client_index, message),
             client: tendermint::rpc::Client::new(server_addr).unwrap(),
         }
     }
@@ -116,9 +117,19 @@ impl<T: Peer> SessionClient<T> {
         }
     }
 
-    pub fn handle_relay_message(&mut self, client_msg: ClientMessage) {
+    pub fn handle_relay_message(&mut self, client_msg: ClientMessage) -> Option<ClientMessage> {
         let msg = client_msg.relay_message.unwrap();
-        self.state.handle_relay_message(msg.clone());
+        let new_message;
+        let next = self.state.handle_relay_message(msg.clone());
+        match next {
+            Some(next_msg) => {
+                new_message = Some(self.state.generate_relay_message(next_msg.clone()));
+            }
+            None => {
+                new_message = Some(ClientMessage::new());
+            }
+        }
+        new_message
     }
 
     pub fn generate_client_answer(&mut self, msg: ServerMessage) -> Option<ClientMessage> {
@@ -182,11 +193,18 @@ where
 }
 
 impl<T: Peer> State<T> {
-    pub fn new(protocol_id: ProtocolIdentifier, capacity: u32, client_addr: SocketAddr) -> State<T>
+    pub fn new(
+        protocol_id: ProtocolIdentifier,
+        capacity: u32,
+        client_addr: SocketAddr,
+        client_index: u32,
+        message: Vec<u8>,
+    ) -> State<T>
     where
         T: Peer,
     {
-        let data_m: ProtocolDataManager<T> = ProtocolDataManager::new(capacity);
+        let data_m: ProtocolDataManager<T> =
+            ProtocolDataManager::new(capacity, message, client_index);
         State {
             registered: false,
             protocol_id,
@@ -307,5 +325,49 @@ impl<T: Peer> State<T> {
             }
             ServerResponse::NoResponse => unimplemented!(),
         }
+    }
+}
+
+pub struct ProtocolDataManager<T: Peer> {
+    pub peer_id: PeerIdentifier,
+    pub capacity: u32,
+    pub data_holder: T, // will be filled when initializing, and on each new step
+    pub client_data: Option<MessagePayload>, // new data calculated by this peer at the beginning of a step (that needs to be sent to other peers)
+    pub new_client_data: bool,
+}
+
+impl<T: Peer> ProtocolDataManager<T> {
+    pub fn new(capacity: u32, message: Vec<u8>, index: u32) -> ProtocolDataManager<T>
+    where
+        T: Peer,
+    {
+        ProtocolDataManager {
+            peer_id: 0,
+            capacity,
+            data_holder: Peer::new(capacity, message, index),
+            client_data: None,
+            new_client_data: false,
+        }
+    }
+
+    /// set manager with the initial values that a local peer holds at the beginning of
+    /// the protocol session
+    /// return: first message
+    pub fn initialize_data(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
+        self.peer_id = peer_id;
+        let zero_step_data = self.data_holder.zero_step(peer_id);
+        self.client_data = zero_step_data;
+        return self.client_data.clone();
+    }
+
+    /// Get the next message this client needs to send
+    pub fn get_next_message(
+        &mut self,
+        from: PeerIdentifier,
+        payload: MessagePayload,
+    ) -> Option<MessagePayload> {
+        self.data_holder.update_data(from, payload);
+        self.data_holder.do_step();
+        self.data_holder.get_next_item()
     }
 }

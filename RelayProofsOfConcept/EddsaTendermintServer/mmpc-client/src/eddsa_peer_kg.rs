@@ -45,7 +45,7 @@ pub struct EddsaPeer {
 }
 
 impl Peer for EddsaPeer {
-    fn new(capacity: u32) -> EddsaPeer {
+    fn new(capacity: u32, _message: Vec<u8>, index: u32) -> EddsaPeer {
         EddsaPeer {
             client_key: KeyPair::create(),
             pks: HashMap::new(),
@@ -144,50 +144,6 @@ impl Peer for EddsaPeer {
             return self.pk_msg.clone();
         }
         None
-    }
-}
-
-pub struct ProtocolDataManager<T: Peer> {
-    pub peer_id: PeerIdentifier,
-    pub capacity: u32,
-    pub data_holder: T, // will be filled when initializing, and on each new step
-    pub client_data: Option<MessagePayload>, // new data calculated by this peer at the beginning of a step (that needs to be sent to other peers)
-    pub new_client_data: bool,
-}
-
-impl<T: Peer> ProtocolDataManager<T> {
-    pub fn new(capacity: u32) -> ProtocolDataManager<T>
-    where
-        T: Peer,
-    {
-        ProtocolDataManager {
-            peer_id: 0,
-            capacity,
-            data_holder: Peer::new(capacity),
-            client_data: None,
-            new_client_data: false,
-        }
-    }
-
-    /// set manager with the initial values that a local peer holds at the beginning of
-    /// the protocol session
-    /// return: first message
-    pub fn initialize_data(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
-        self.peer_id = peer_id;
-        let zero_step_data = self.data_holder.zero_step(peer_id);
-        self.client_data = zero_step_data;
-        return self.client_data.clone();
-    }
-
-    /// Get the next message this client needs to send
-    pub fn get_next_message(
-        &mut self,
-        from: PeerIdentifier,
-        payload: MessagePayload,
-    ) -> Option<MessagePayload> {
-        self.data_holder.update_data(from, payload);
-        self.data_holder.do_step();
-        self.data_holder.get_next_item()
     }
 }
 
