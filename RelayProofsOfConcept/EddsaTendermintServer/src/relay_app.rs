@@ -4,8 +4,8 @@ use abci::{
     ResponseQuery,
 };
 use log::{debug, info, warn};
-use relay_server_common::protocol::ProtocolDescriptor;
-use relay_server_common::{
+use mmpc_server_common::protocol::ProtocolDescriptor;
+use mmpc_server_common::{
     ClientMessage, ClientMessageType, MissingMessagesRequest, ServerMessage, ServerResponse,
 };
 

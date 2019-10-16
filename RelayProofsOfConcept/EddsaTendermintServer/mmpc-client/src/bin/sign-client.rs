@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 use std::vec::Vec;
 use std::{thread, time};
 
-use relay_server_common::{
+use mmpc_server_common::{
     ClientMessage, MessagePayload, MissingMessagesRequest, PeerIdentifier, ProtocolIdentifier,
     RelayMessage, ServerMessage, ServerMessageType, ServerResponse, StoredMessages,
 };
@@ -21,7 +21,7 @@ use multi_party_eddsa::protocols::aggsig::{
     test_com, verify, EphemeralKey, KeyAgg, KeyPair, SignFirstMsg, SignSecondMsg, Signature,
 };
 
-use relay_server_common::common::*;
+use mmpc_server_common::common::*;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;

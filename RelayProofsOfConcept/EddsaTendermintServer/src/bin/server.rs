@@ -10,7 +10,7 @@
 //! this will run a client that utilizes the server in some way
 //!
 use clap::{App, Arg, ArgMatches};
-use relay_server::RelayApp;
+use mmpc_server::RelayApp;
 use std::io;
 use std::net::SocketAddr;
 

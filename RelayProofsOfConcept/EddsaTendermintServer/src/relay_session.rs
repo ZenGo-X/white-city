@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
-use relay_server_common::common::{NOT_A_PEER, STATE_NOT_INITIALIZED};
-use relay_server_common::{ClientMessage, StoredMessages};
-use relay_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
+use mmpc_server_common::common::{NOT_A_PEER, STATE_NOT_INITIALIZED};
+use mmpc_server_common::{ClientMessage, StoredMessages};
+use mmpc_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
 
-use relay_server_common::protocol::ProtocolDescriptor;
+use mmpc_server_common::protocol::ProtocolDescriptor;
 
 #[derive(Clone, Debug)]
 pub struct Peer {
@@ -119,7 +119,7 @@ impl RelaySession {
             // check that the protocol is valid
             RelaySessionState::Empty => {
                 debug!("Checking if protocol description is valid");
-                if !relay_server_common::protocol::is_valid_protocol(&protocol) {
+                if !mmpc_server_common::protocol::is_valid_protocol(&protocol) {
                     warn!("Protocol is invalid");
 
                     return false;
@@ -154,7 +154,7 @@ impl RelaySession {
             active_peers: Arc::new(RwLock::new(0)),
 
             protocol: Arc::new(RwLock::new(
-                relay_server_common::protocol::ProtocolDescriptor::new(0, capacity),
+                mmpc_server_common::protocol::ProtocolDescriptor::new(0, capacity),
             )),
 
             state: Arc::new(RwLock::new(RelaySessionState::Empty)),
@@ -258,8 +258,8 @@ mod tests {
     use super::RelaySession;
     use super::RelaySessionState;
 
-    use relay_server_common::protocol::ProtocolDescriptor;
-    use relay_server_common::ProtocolIdentifier;
+    use mmpc_server_common::protocol::ProtocolDescriptor;
+    use mmpc_server_common::ProtocolIdentifier;
 
     use std::net::SocketAddr;
     use std::sync::Arc;

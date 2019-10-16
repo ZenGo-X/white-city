@@ -2,15 +2,15 @@ use log::{debug, error, info, warn};
 use std::net::SocketAddr;
 use std::{thread, time};
 
-use relay_server_common::{
+use mmpc_server_common::{
     ClientMessage, MessagePayload, MissingMessagesRequest, PeerIdentifier, ProtocolIdentifier,
     RelayMessage, ServerMessage, ServerMessageType, ServerResponse, StoredMessages,
 };
 
 use curv::elliptic::curves::ed25519::*;
 use curv::GE;
+use mmpc_server_common::common::*;
 use multi_party_eddsa::protocols::aggsig::{EphemeralKey, KeyAgg, KeyPair};
-use relay_server_common::common::*;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 
