@@ -1,4 +1,14 @@
-FROM rust@sha256:1cdce1c7208150f065dac04b580ab8363a03cff7ddb745ddc2659d58dbc12ea8 as build
+FROM rust:latest as build
+
+
+ADD . /KZen-networks/white-city/RelayProofsOfConcept/EddsaTendermintServer
+
+RUN cd /KZen-networks/white-city/RelayProofsOfConcept/EddsaTendermintServer && cargo build
+
+
+
+RUN apk add --no-cache make git
+
 
 COPY ./ ./
 
