@@ -43,5 +43,9 @@ name = "keygen-client"
 path = "src/bin/keygen-client.rs"
 
 [[bin]]
+name = "kg-client"
+path = "src/bin/kg-client.rs"
+
+[[bin]]
 name = "sign-client"
 path = "src/bin/sign-client.rs"
