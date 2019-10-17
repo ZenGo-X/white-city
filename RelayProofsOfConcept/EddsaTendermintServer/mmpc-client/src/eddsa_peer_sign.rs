@@ -462,6 +462,7 @@ impl Peer for EddsaPeer {
         debug!("Orig pk {:?}", orig_apk);
         // Original apk should be equal to the apk created during signing
         assert_eq!(orig_apk, apk.apk);
+        //assert_eq!(apk, apk.apk);
         // Verify signature against the original! pubkey
         match verify(&signature, &self.message[..], &orig_apk) {
             Ok(_) => {

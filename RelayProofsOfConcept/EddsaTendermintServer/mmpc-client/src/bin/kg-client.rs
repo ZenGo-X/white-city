@@ -152,7 +152,8 @@ fn main() {
         capacity,
         Vec::new(),
     );
-    let server_response = session.register(client_index, capacity);
+    // Initially do not request any index, the index is determined by the server
+    let server_response = session.register(client_index, capacity, -1);
     let next_message = session.generate_client_answer(server_response);
     debug!("Next message: {:?}", next_message);
     // TODO The client/server

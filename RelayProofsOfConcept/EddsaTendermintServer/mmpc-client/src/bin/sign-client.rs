@@ -1,3 +1,4 @@
+use std::fs;
 /// Implementation of a client that communicates with the relay server
 /// This client represents eddsa peer
 use std::io;
@@ -10,6 +11,8 @@ use log::debug;
 use mmpc_client::eddsa_peer_sign::EddsaPeer;
 use mmpc_client::peer::Peer;
 use mmpc_client::tendermint_client::SessionClient;
+
+use multi_party_eddsa::protocols::aggsig::{KeyAgg, KeyPair};
 
 fn arg_matches<'a>() -> ArgMatches<'a> {
     App::new("relay-server")
@@ -143,6 +146,10 @@ fn main() {
         Err(_) => message.as_bytes().to_vec(),
     };
 
+    let data = fs::read_to_string(format!("keys{}", client_index))
+        .expect("Unable to load keys, did you run keygen first? ");
+    let (_, _, kg_index): (KeyPair, KeyAgg, i32) = serde_json::from_str(&data).unwrap();
+
     // Port and ip address are used as a unique indetifier to the server
     // This should be replaced with PKi down the road
     let port = 8080 + client_index;
@@ -155,7 +162,7 @@ fn main() {
         capacity,
         message_to_sign,
     );
-    let server_response = session.register(client_index, capacity);
+    let server_response = session.register(client_index, capacity, kg_index);
     let mut next_message = session.generate_client_answer(server_response);
     debug!("Next message: {:?}", next_message);
     // TODO The client/server response could be an error

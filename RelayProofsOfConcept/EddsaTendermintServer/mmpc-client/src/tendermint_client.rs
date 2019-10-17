@@ -73,12 +73,12 @@ impl<T: Peer> SessionClient<T> {
         return server_response;
     }
 
-    pub fn register(&mut self, index: u32, capacity: u32) -> ServerMessage {
+    pub fn register(&mut self, index: u32, capacity: u32, kg_index: i32) -> ServerMessage {
         let mut msg = ClientMessage::new();
         let port = 8080 + index;
         let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
         // No index to begin with
-        msg.set_register(client_addr, self.state.protocol_id, capacity, -1);
+        msg.set_register(client_addr, self.state.protocol_id, capacity, kg_index);
 
         debug!("Regsiter message {:?}", msg);
         let tx =
