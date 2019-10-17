@@ -50,7 +50,9 @@ fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
         1 => base_config
             .level(log::LevelFilter::Debug)
             .level_for("tokio_core", log::LevelFilter::Warn) // filter out tokio
-            .level_for("tokio_reactor", log::LevelFilter::Warn),
+            .level_for("tokio_reactor", log::LevelFilter::Warn)
+            .level_for("hyper", log::LevelFilter::Warn)
+            .level_for("abci::server", log::LevelFilter::Warn),
         _2_or_more => base_config.level(log::LevelFilter::Trace),
     };
 

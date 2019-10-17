@@ -5,10 +5,10 @@ rm signature?
 rm signature??
 rm log*.log
 
-n=3
+n=32
 
 echo "sign part"
 for i in $(seq 1 $n);
 do
-    cargo run --example sign-client -- -I $i -P $n -M "message" &> log$i.log &
+    cargo run -p mmpc-client --bin sign-client -- -I $i -C $n -M "message"&
 done

@@ -94,7 +94,7 @@ impl EddsaPeer {
         return r_tot;
     }
     fn aggregate_pks(&mut self) -> KeyAgg {
-        println!("aggregating pks");
+        debug!("aggregating pks");
         let _cap = self.capacity as usize;
         let mut pks = Vec::with_capacity(self.capacity as usize);
         for index in 0..self.capacity {
@@ -102,24 +102,24 @@ impl EddsaPeer {
             let pk = self.pks.get_mut(&peer).unwrap();
             pks.push(pk.clone());
         }
-        println!("# of public keys : {:?}", pks.len());
+        debug!("# of public keys : {:?}", pks.len());
         let peer_id = self.peer_id;
         let index = (peer_id - 1) as usize;
-        println!("Public keys {:?}", &pks);
-        println!("KG index:{}, SIG index:{}", self.kg_index, peer_id);
+        debug!("Public keys {:?}", &pks);
+        debug!("KG index:{}, SIG index:{}", self.kg_index, peer_id);
         // TODO: sort the pks according to key-gen indexes when applying
         KeyPair::key_aggregation_n(&pks, &index)
     }
 
     fn validate_commitments(&mut self) -> bool {
         // iterate over all peer Rs
-        println!("----------\nvalidating commitments\n----------");
+        debug!("----------\nvalidating commitments\n----------");
         let eight: FE = ECScalar::from(&BigInt::from(8));
         let eight_inv = eight.invert();
         let r_s = &self.r_s;
         for (peer_id, r) in r_s {
-            println!("peer: {:}", peer_id);
-            println!("r: {:}", r);
+            debug!("peer: {:}", peer_id);
+            debug!("r: {:}", r);
             // convert the json_string to a construct
             let _r: SignSecondMsg = serde_json::from_str(r).unwrap();
 
@@ -129,7 +129,7 @@ impl EddsaPeer {
                 .commitments
                 .get(&k)
                 .expect("peer didn't send commitment");
-            println!("commitment : {:?}", cmtmnt);
+            debug!("commitment : {:?}", cmtmnt);
             let commitment: SignFirstMsg = serde_json::from_str(cmtmnt).unwrap();
             // if we couldn't validate the commitment - failure
             if !test_com(
@@ -140,7 +140,7 @@ impl EddsaPeer {
                 return false;
             }
         }
-        println!("----------\ncommitments valid\n----------");
+        debug!("----------\ncommitments valid\n----------");
         true
     }
 }
@@ -160,7 +160,7 @@ impl EddsaPeer {
                 let s_slice: &str = &pk[..]; // take a full slice of the string
                 let pk: GE = serde_json::from_str(&s_slice)
                     .unwrap_or_else(|_| panic!("Failed to deserialize R"));
-                println!("-------Got peer # {:} pk! {:?}", from, pk * &eight_inv);
+                info!("-------Got peer # {:} pk! {:?}", from, pk * &eight_inv);
                 self.add_pk(from, pk * &eight_inv);
             }
             _ => panic!("expected public key message"),
@@ -171,7 +171,7 @@ impl EddsaPeer {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::Commitment(t) => {
-                println!("-------Got peer # {:} commitment! {:?}", from, t);
+                info!("-------Got peer # {:} commitment! {:?}", from, t);
                 let peer_id = self.peer_id;
                 if from == peer_id {
                     self.commitment_accepted = true;
@@ -186,7 +186,7 @@ impl EddsaPeer {
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::RMessage(r) => {
-                println!("-------Got peer # {:} R message!", from);
+                info!("-------Got peer # {:} R message!", from);
                 let peer_id = self.peer_id;
                 if from == peer_id {
                     self.r_accepted = true;
@@ -198,11 +198,11 @@ impl EddsaPeer {
     }
 
     pub fn update_data_step_3(&mut self, from: PeerIdentifier, payload: MessagePayload) {
-        println!("updating data step 3");
+        debug!("updating data step 3");
         let payload_type = EddsaPeer::resolve_payload_type(&payload);
         match payload_type {
             MessagePayloadType::Signature(s) => {
-                println!("-------Got peer # {:} Signature", from);
+                debug!("-------Got peer # {:} Signature", from);
                 let peer_id = self.peer_id;
                 if from == peer_id {
                     self.sig_accepted = true;
@@ -234,7 +234,7 @@ impl EddsaPeer {
         self.r_s.len() == self.capacity as usize
     }
     pub fn is_done_step_3(&mut self) -> bool {
-        println!("Checking if last step is done");
+        debug!("Checking if last step is done");
 
         if self.sigs.len() == self.capacity as usize {
             self.finalize().unwrap();
@@ -274,7 +274,7 @@ impl EddsaPeer {
 
     /// step 2 - return the clients R. No extra calculations
     pub fn step_2(&mut self) {
-        println!("Step 2 - no calculations required. Relevant values should be ready");
+        debug!("Step 2 - no calculations required. Relevant values should be ready");
     }
     /// step 3 - after validating all commitments:
     /// 1. compute APK
@@ -286,9 +286,9 @@ impl EddsaPeer {
             panic!("Commitments not valid!")
         }
         let agg_key = self.aggregate_pks();
-        println!("computed agg_key");
+        debug!("computed agg_key");
         let r_tot = self.compute_r_tot();
-        println!("computed r_tot");
+        debug!("computed r_tot");
         //       let eph_key = self.ephemeral_key.clone();
         match self.ephemeral_key {
             Some(ref eph_key) => {
@@ -339,7 +339,7 @@ impl EddsaPeer {
 
 impl Peer for EddsaPeer {
     fn new(capacity: u32, _message: Vec<u8>, index: u32) -> EddsaPeer {
-        println!("Index is {:?}", index);
+        debug!("Index is {:?}", index);
         let data = fs::read_to_string(format!("keys{}", index))
             .expect("Unable to load keys, did you run keygen first? ");
         let (key, _apk, kg_index): (KeyPair, KeyAgg, u32) = serde_json::from_str(&data).unwrap();
@@ -370,6 +370,10 @@ impl Peer for EddsaPeer {
         }
     }
 
+    fn set_peer_id(&mut self, peer_id: PeerIdentifier) {
+        self.peer_id = peer_id;
+    }
+
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
         self.peer_id = peer_id;
         let pk = self.client_key.public_key.clone();
@@ -384,24 +388,32 @@ impl Peer for EddsaPeer {
         self.current_step
     }
 
+    fn capacity(&self) -> u32 {
+        self.capacity
+    }
+
+    fn peer_id(&self) -> PeerIdentifier {
+        self.peer_id
+    }
+
     fn do_step(&mut self) {
-        println!("Current step is: {:}", self.current_step);
+        info!("Current step is: {:}", self.current_step);
         if self.is_step_done() {
             // do the next step
-            println!("step {:} done!", self.current_step);
+            info!("step {:} done!", self.current_step);
             self.current_step += 1;
             match self.current_step {
                 1 => self.step_1(),
                 2 => self.step_2(),
                 3 => self.step_3(),
                 4 => {
-                    println!("----------\nDone.\n----------");
+                    info!("----------\nDone.\n----------");
                     self.is_done = true;
                 }
                 _ => panic!("Unsupported step"),
             }
         } else {
-            println!("step not done");
+            info!("step not done");
         }
     }
 
@@ -446,8 +458,8 @@ impl Peer for EddsaPeer {
 
         let orig_apk = orig_apk.apk * &eight_inv;
 
-        println!("Aggregated pk {:?}", apk);
-        println!("Orig pk {:?}", orig_apk);
+        debug!("Aggregated pk {:?}", apk);
+        debug!("Orig pk {:?}", orig_apk);
         // Original apk should be equal to the apk created during signing
         assert_eq!(orig_apk, apk.apk);
         // Verify signature against the original! pubkey
@@ -478,21 +490,20 @@ impl Peer for EddsaPeer {
     /// depending on the current step and the last message
     /// of the peer that was accepted by the server
     fn get_next_item(&mut self) -> Option<MessagePayload> {
-        //println!("current_step: {:}, pk_accepted: {:} commitment_accepted: {:} r_accepted: {:} sig_accepted: {:}",self.current_step,self.pk_accepted,self.commitment_accepted, self.r_accepted, self.sig_accepted);
         if self.current_step == 0 || !self.pk_accepted {
-            println!("next item is pk: {:?}", self.pk_msg);
+            info!("next item is pk: {:?}", self.pk_msg);
             return self.pk_msg.clone();
         }
         if self.current_step == 1 || !self.commitment_accepted {
-            println!("next item is commitment: {:?}", self.commitment_msg);
+            info!("next item is commitment: {:?}", self.commitment_msg);
             return self.commitment_msg.clone();
         }
         if self.current_step == 2 || !self.r_accepted {
-            println!("next item is r: {:?}", self.r_msg);
+            info!("next item is r: {:?}", self.r_msg);
             return self.r_msg.clone();
         }
         if self.current_step == 3 || !self.sig_accepted {
-            println!("next item is Signature: {:?}", self.sig_msg);
+            info!("next item is Signature: {:?}", self.sig_msg);
             return self.sig_msg.clone();
         }
         None

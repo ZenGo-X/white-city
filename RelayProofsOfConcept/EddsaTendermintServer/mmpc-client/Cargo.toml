@@ -39,10 +39,6 @@ branch = "develop"
 features = ["rpc"]
 
 [[bin]]
-name = "keygen-client"
-path = "src/bin/keygen-client.rs"
-
-[[bin]]
 name = "kg-client"
 path = "src/bin/kg-client.rs"
 

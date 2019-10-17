@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 
-use crate::peer::{Peer, MAX_CLIENTS};
+use crate::peer::{Peer, ProtocolDataManager, MAX_CLIENTS};
 use log::{debug, error, info, warn};
 
 use mmpc_server_common::common::*;
@@ -37,15 +37,15 @@ impl<T: Peer> SessionClient<T> {
 impl<T: Peer> SessionClient<T> {
     pub fn query(&self) -> BTreeMap<u32, ClientMessage> {
         let current_step = self.state.data_manager.data_holder.current_step();
-        println!("Current step {}", current_step);
-        let capacity = self.state.data_manager.capacity;
-        println!("Capacity {}", capacity);
+        debug!("Current step {}", current_step);
+        let capacity = self.state.data_manager.data_holder.capacity();
+        debug!("Capacity {}", capacity);
         let mut missing_clients = self
             .state
             .stored_messages
             .get_missing_clients_vector(current_step, capacity);
 
-        println!("Missing: {:?}", missing_clients);
+        debug!("Missing: {:?}", missing_clients);
 
         // No need to query if nothing is missing
         if missing_clients.is_empty() {
@@ -55,7 +55,7 @@ impl<T: Peer> SessionClient<T> {
         if missing_clients.len() > MAX_CLIENTS {
             missing_clients.truncate(MAX_CLIENTS);
         }
-        println!("Missing requested: {:?}", missing_clients);
+        debug!("Missing requested: {:?}", missing_clients);
 
         let request = MissingMessagesRequest {
             round: current_step,
@@ -63,7 +63,7 @@ impl<T: Peer> SessionClient<T> {
         };
         let tx = serde_json::to_string(&request).unwrap();
         let response = self.client.abci_query(None, tx, None, false).unwrap();
-        println!("RawResponse: {:?}", response);
+        debug!("RawResponse: {:?}", response);
         let server_response = response.log;
         let server_response: BTreeMap<u32, ClientMessage> =
             match serde_json::from_str(&server_response.to_string()) {
@@ -78,7 +78,7 @@ impl<T: Peer> SessionClient<T> {
         let port = 8080 + index;
         let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
         // No index to begin with
-        msg.register(client_addr, self.state.protocol_id, capacity, -1);
+        msg.set_register(client_addr, self.state.protocol_id, capacity, -1);
 
         debug!("Regsiter message {:?}", msg);
         let tx =
@@ -152,18 +152,6 @@ impl<T: Peer> SessionClient<T> {
             ServerMessageType::RelayMessage => {
                 new_message = Some(ClientMessage::new());
             }
-            //     let next = self.state.handle_relay_message(msg.clone());
-            //     match next {
-            //         Some(next_msg) => {
-            //             //debug!("next message to send is {:}", next_msg);
-            //             new_message = Some(self.state.generate_relay_message(next_msg.clone()));
-            //         }
-            //         None => {
-            //             debug!("next item is None. Client is finished.");
-            //             new_message = Some(ClientMessage::new());
-            //         }
-            //     }
-            // }
             ServerMessageType::Abort => {
                 info!("Got abort message");
                 //Ok(MessageProcessResult::NoMessage)
@@ -221,7 +209,7 @@ impl<T: Peer> State<T> {
     fn handle_relay_message(&mut self, relay_msg: RelayMessage) -> Option<MessagePayload> {
         // parse relay message
         let from = relay_msg.peer_number;
-        if from == self.data_manager.peer_id {
+        if from == self.data_manager.data_holder.peer_id() {
             debug!("-------self message accepted ------\n ");
         }
         let payload = relay_msg.message;
@@ -232,7 +220,7 @@ impl<T: Peer> State<T> {
         let _msg = ClientMessage::new();
         // create relay message
         let mut relay_message = RelayMessage::new(
-            self.data_manager.peer_id,
+            self.data_manager.data_holder.peer_id(),
             self.protocol_id,
             self.client_addr,
         );
@@ -325,49 +313,5 @@ impl<T: Peer> State<T> {
             }
             ServerResponse::NoResponse => unimplemented!(),
         }
-    }
-}
-
-pub struct ProtocolDataManager<T: Peer> {
-    pub peer_id: PeerIdentifier,
-    pub capacity: u32,
-    pub data_holder: T, // will be filled when initializing, and on each new step
-    pub client_data: Option<MessagePayload>, // new data calculated by this peer at the beginning of a step (that needs to be sent to other peers)
-    pub new_client_data: bool,
-}
-
-impl<T: Peer> ProtocolDataManager<T> {
-    pub fn new(capacity: u32, message: Vec<u8>, index: u32) -> ProtocolDataManager<T>
-    where
-        T: Peer,
-    {
-        ProtocolDataManager {
-            peer_id: 0,
-            capacity,
-            data_holder: Peer::new(capacity, message, index),
-            client_data: None,
-            new_client_data: false,
-        }
-    }
-
-    /// set manager with the initial values that a local peer holds at the beginning of
-    /// the protocol session
-    /// return: first message
-    pub fn initialize_data(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
-        self.peer_id = peer_id;
-        let zero_step_data = self.data_holder.zero_step(peer_id);
-        self.client_data = zero_step_data;
-        return self.client_data.clone();
-    }
-
-    /// Get the next message this client needs to send
-    pub fn get_next_message(
-        &mut self,
-        from: PeerIdentifier,
-        payload: MessagePayload,
-    ) -> Option<MessagePayload> {
-        self.data_holder.update_data(from, payload);
-        self.data_holder.do_step();
-        self.data_holder.get_next_item()
     }
 }

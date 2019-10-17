@@ -172,27 +172,13 @@ impl RelaySession {
         debug!("Server state: {:?}", self.state());
         debug!("Turn of peer #: {:}", self.protocol().next());
 
-        match self.state() {
-            RelaySessionState::Initialized => {
-                debug!("Relay sessions state is initialized");
-            }
-            _ => {
-                debug!("Relay sessions state is not initialized");
-                return Err(STATE_NOT_INITIALIZED);
-            }
-        }
-        // validate the sender in the message (peer_number field) is the peer associated with this address
-        let peer = self.get_peer_by_address(from);
+        // TODO: Add some checks of what messages can be stored
 
-        // if peer is present and registered
-        if let Some(_p) = peer {
-            return Ok(());
-        }
-        return Err(NOT_A_PEER);
+        return Ok(());
     }
 
     /// get a copy of Peer that addr represents
-    pub fn get_peer_by_address(&self, addr: &SocketAddr) -> Option<Peer> {
+    fn get_peer_by_address(&self, addr: &SocketAddr) -> Option<Peer> {
         match self.peers.read().unwrap().get(addr) {
             Some(p) => match p.registered {
                 true => Some(p.clone()),
@@ -360,6 +346,5 @@ mod tests {
         let messages = rs.register_new_peer(client_addr, protocol_id, capacity, -1);
         // Once all are connected, state should initialize
         assert_eq!(RelaySessionState::Initialized, rs.state());
-        // TODO
     }
 }

@@ -76,9 +76,9 @@ impl abci::Application for RelayApp {
     fn check_tx(&mut self, req: &RequestCheckTx) -> ResponseCheckTx {
         let mut resp = ResponseCheckTx::new();
         let c = convert_tx(req.get_tx());
-        info!("Received {:?}", c);
+        debug!("CheckTX: Received {:?}", c);
         let client_message: ClientMessage = serde_json::from_slice(req.get_tx()).unwrap();
-        info!("Value is {:?}", client_message);
+        debug!("Value is {:?}", client_message);
         resp.set_code(self.is_valid(&client_message));
         resp
     }
@@ -86,7 +86,7 @@ impl abci::Application for RelayApp {
     fn deliver_tx(&mut self, req: &RequestDeliverTx) -> ResponseDeliverTx {
         let mut resp = ResponseDeliverTx::new();
         let c = convert_tx(req.get_tx());
-        info!("Received {:?} In DeliverTx", c);
+        info!("DeliverTX: Received {:?}", c);
         let client_message: ClientMessage = serde_json::from_slice(req.get_tx()).unwrap();
         info!("Value is {:?} In DeliverTx", client_message);
 
@@ -153,7 +153,7 @@ impl abci::Application for RelayApp {
         let mut resp = ResponseQuery::new();
 
         let missing_messages: MissingMessagesRequest = serde_json::from_slice(&req.data).unwrap();
-        info!("Received {:?} In Query", missing_messages);
+        info!("Query: Received {:?}", missing_messages);
 
         // TODO: Error handle
         let requested_round = missing_messages.round;
@@ -161,6 +161,7 @@ impl abci::Application for RelayApp {
         info!("Requested round {}", requested_round);
 
         let stored_messages = self.relay_session.stored_messages();
+        // debug!("Query: All Stored Messages: {:?}", stored_messages);
 
         if missing_clients.len() > MAX_CLIENTS {
             missing_clients.truncate(MAX_CLIENTS);

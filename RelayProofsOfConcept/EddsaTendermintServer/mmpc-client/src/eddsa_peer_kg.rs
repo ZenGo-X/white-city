@@ -5,7 +5,7 @@ use curv::elliptic::curves::ed25519::*;
 use log::{debug, info};
 use multi_party_eddsa::protocols::aggsig::{EphemeralKey, KeyAgg, KeyPair};
 
-use crate::peer::{MessagePayloadType, Peer};
+use crate::peer::Peer;
 use mmpc_server_common::common::*;
 use mmpc_server_common::{MessagePayload, PeerIdentifier};
 
@@ -46,6 +46,7 @@ pub struct EddsaPeer {
 
 impl Peer for EddsaPeer {
     fn new(capacity: u32, _message: Vec<u8>, index: u32) -> EddsaPeer {
+        debug!("Capacity is set to {}", capacity);
         EddsaPeer {
             client_key: KeyPair::create(),
             pks: HashMap::new(),
@@ -71,6 +72,10 @@ impl Peer for EddsaPeer {
         }
     }
 
+    fn set_peer_id(&mut self, peer_id: PeerIdentifier) {
+        self.peer_id = peer_id;
+    }
+
     fn zero_step(&mut self, peer_id: PeerIdentifier) -> Option<MessagePayload> {
         self.peer_id = peer_id;
         let pk = self.client_key.public_key.clone();
@@ -83,6 +88,15 @@ impl Peer for EddsaPeer {
 
     fn current_step(&self) -> u32 {
         self.current_step
+    }
+
+    fn capacity(&self) -> u32 {
+        debug!("CapacityF is {}", self.capacity);
+        self.capacity
+    }
+
+    fn peer_id(&self) -> PeerIdentifier {
+        self.peer_id
     }
 
     fn do_step(&mut self) {
@@ -105,6 +119,7 @@ impl Peer for EddsaPeer {
 
     fn update_data(&mut self, from: PeerIdentifier, payload: MessagePayload) {
         // update data according to step
+        debug!("Current step {}", self.current_step);
         match self.current_step {
             0 => self.update_data_step_0(from, payload),
 
@@ -138,7 +153,6 @@ impl Peer for EddsaPeer {
     /// depending on the current step and the last message
     /// of the peer that was accepted by the server
     fn get_next_item(&mut self) -> Option<MessagePayload> {
-        //println!("current_step: {:}, pk_accepted: {:} commitment_accepted: {:} r_accepted: {:} sig_accepted: {:}",self.current_step,self.pk_accepted,self.commitment_accepted, self.r_accepted, self.sig_accepted);
         if self.current_step == 0 || !self.pk_accepted {
             debug!("next item is pk: {:?}", self.pk_msg);
             return self.pk_msg.clone();
@@ -155,7 +169,7 @@ impl EddsaPeer {
         }
     }
     pub fn is_done_step_0(&mut self) -> bool {
-        if self.pks.len() == self.capacity as usize {
+        if self.pks.len() == self.capacity() as usize {
             self.finalize().expect("Finalized falied");
             return true;
         }
@@ -208,9 +222,9 @@ impl EddsaPeer {
     }
     fn aggregate_pks(&mut self) -> KeyAgg {
         debug!("aggregating pks");
-        let _cap = self.capacity as usize;
-        let mut pks = Vec::with_capacity(self.capacity as usize);
-        for index in 0..self.capacity {
+        let _cap = self.capacity() as usize;
+        let mut pks = Vec::with_capacity(self.capacity() as usize);
+        for index in 0..self.capacity() {
             let peer = index + 1;
             let pk = self.pks.get_mut(&peer).unwrap();
             pks.push(pk.clone());
@@ -221,4 +235,11 @@ impl EddsaPeer {
         let agg_key = KeyPair::key_aggregation_n(&pks, &index);
         return agg_key;
     }
+}
+
+#[derive(Debug)]
+pub enum MessagePayloadType {
+    /// Types of expected relay messages
+    /// for step 0 we expect PUBLIC_KEY_MESSAGE
+    PublicKey(String),
 }
