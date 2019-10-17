@@ -14,6 +14,9 @@ use mmpc_client::tendermint_client::SessionClient;
 
 use multi_party_eddsa::protocols::aggsig::{KeyAgg, KeyPair};
 
+const MAX_RETRY: u32 = 30;
+const RETRY_TIMEOUT: u64 = 100;
+
 fn arg_matches<'a>() -> ArgMatches<'a> {
     App::new("relay-server")
         .arg(
@@ -171,7 +174,7 @@ fn main() {
     // Number of rounds in signing
     let rounds = 4;
     'outer: for _ in 0..rounds {
-        'inner: loop {
+        'inner: for _ in { 1..MAX_RETRY } {
             let round = session.state.data_manager.data_holder.current_step();
             if session.state.stored_messages.get_number_messages(round) == capacity as usize {
                 for msg in session
@@ -192,7 +195,7 @@ fn main() {
                 debug!("Server response {:?}", server_response);
                 debug!("Server response len {}", server_response.keys().len());
                 session.store_server_response(&server_response);
-                thread::sleep(time::Duration::from_millis(100));
+                thread::sleep(time::Duration::from_millis(RETRY_TIMEOUT));
                 debug!("All stored messages {:?}", session.state.stored_messages);
             }
         }
