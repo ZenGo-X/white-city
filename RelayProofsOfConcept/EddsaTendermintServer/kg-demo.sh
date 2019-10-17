@@ -5,7 +5,7 @@ rm keys?
 rm keys??
 rm log-kg*.log
 
-n=32
+n=3
 
 echo "keygen part"
 for i in $(seq 1 $n);

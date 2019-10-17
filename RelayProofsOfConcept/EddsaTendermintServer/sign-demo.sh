@@ -5,7 +5,7 @@ rm signature?
 rm signature??
 rm log*.log
 
-n=32
+n=3
 
 echo "sign part"
 for i in $(seq 1 $n);
