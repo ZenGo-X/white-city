@@ -1,0 +1,1 @@
+docker build ./Dockerfiles/server
