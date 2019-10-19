@@ -4,6 +4,7 @@ echo "$0: MP-EDDSA"
 rm keys?
 rm keys??
 rm log-kg*.log
+rm log-error*.log
 
 n=3
 

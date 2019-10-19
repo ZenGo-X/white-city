@@ -153,12 +153,12 @@ impl abci::Application for RelayApp {
         let mut resp = ResponseQuery::new();
 
         let missing_messages: MissingMessagesRequest = serde_json::from_slice(&req.data).unwrap();
-        info!("Query: Received {:?}", missing_messages);
+        debug!("Query: Received {:?}", missing_messages);
 
         // TODO: Error handle
         let requested_round = missing_messages.round;
         let mut missing_clients = missing_messages.missing_clients;
-        info!("Requested round {}", requested_round);
+        debug!("Requested round {}", requested_round);
 
         let stored_messages = self.relay_session.stored_messages();
         // debug!("Query: All Stored Messages: {:?}", stored_messages);
@@ -169,15 +169,10 @@ impl abci::Application for RelayApp {
         let response =
             stored_messages.get_messages_map_from_vector(requested_round, &missing_clients);
 
-        match stored_messages.messages.get(&1) {
-            Some(test) => info!("Stored messages in round 1: {:?}", test),
-            None => {}
-        }
-
-        info!("Server response {:?}", response);
+        debug!("Server response {:?}", response);
 
         resp.set_log(serde_json::to_string(&response).unwrap().to_owned());
-        info!("Response log {:?}", resp.log);
+        debug!("Response log {:?}", resp.log);
 
         resp.set_code(0);
         resp.set_index(-1);

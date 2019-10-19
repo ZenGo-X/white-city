@@ -40,7 +40,7 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
         .get_matches()
 }
 
-fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
+fn setup_logging(verbosity: u64, port: String) -> Result<(), fern::InitError> {
     let mut base_config = fern::Dispatch::new();
 
     base_config = match verbosity {
@@ -68,7 +68,7 @@ fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
                 message
             ))
         })
-        .chain(fern::log_file("relay-server.log")?);
+        .chain(fern::log_file(format!("relay-server-{}.log", port))?);
 
     let stdout_config = fern::Dispatch::new()
         .format(|out, message, record| {
@@ -114,9 +114,11 @@ fn main() {
         .parse()
         .expect("Invalid number of participants");
 
+    let port = addr.port().to_string();
+
     let verbosity: u64 = matches.occurrences_of("verbose");
 
-    setup_logging(verbosity).expect("failed to initialize logging.");
+    setup_logging(verbosity, port).expect("failed to initialize logging.");
 
     abci::run(addr, RelayApp::new(capacity));
 }

@@ -45,7 +45,7 @@ pub struct EddsaPeer {
 }
 
 impl Peer for EddsaPeer {
-    fn new(capacity: u32, _message: Vec<u8>, index: u32) -> EddsaPeer {
+    fn new(capacity: u32, _message: Vec<u8>, _index: u32) -> EddsaPeer {
         debug!("Capacity is set to {}", capacity);
         EddsaPeer {
             client_key: KeyPair::create(),
@@ -91,7 +91,6 @@ impl Peer for EddsaPeer {
     }
 
     fn capacity(&self) -> u32 {
-        debug!("CapacityF is {}", self.capacity);
         self.capacity
     }
 
