@@ -9,8 +9,8 @@ use mmpc_client::eddsa_peer_kg::EddsaPeer;
 use mmpc_client::peer::Peer;
 use mmpc_client::tendermint_client::SessionClient;
 
-const MAX_RETRY: u32 = 30;
-const RETRY_TIMEOUT: u64 = 100;
+const MAX_RETRY: u32 = 64;
+const RETRY_TIMEOUT: u64 = 200;
 
 fn arg_matches<'a>() -> ArgMatches<'a> {
     App::new("relay-server")

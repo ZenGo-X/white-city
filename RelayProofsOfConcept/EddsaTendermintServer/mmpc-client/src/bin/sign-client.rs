@@ -14,8 +14,8 @@ use mmpc_client::tendermint_client::SessionClient;
 
 use multi_party_eddsa::protocols::aggsig::{KeyAgg, KeyPair};
 
-const MAX_RETRY: u32 = 30;
-const RETRY_TIMEOUT: u64 = 100;
+const MAX_RETRY: u32 = 512;
+const RETRY_TIMEOUT: u64 = 200;
 
 fn arg_matches<'a>() -> ArgMatches<'a> {
     App::new("relay-server")
@@ -83,7 +83,7 @@ fn setup_logging(verbosity: u64, index: u32) -> Result<(), fern::InitError> {
     let stdout_config = fern::Dispatch::new()
         .format(|out, message, record| {
             // special format for debug messages coming from our own crate.
-            if record.level() > log::LevelFilter::Info && record.target() == "relay_server" {
+            if record.level() > log::LevelFilter::Info && record.target() == "mmpc_client" {
                 out.finish(format_args!(
                     "---\nDEBUG: {}: {}\n---",
                     chrono::Local::now().format("%H:%M:%S"),
@@ -192,11 +192,11 @@ fn main() {
                 break 'inner;
             } else {
                 let server_response = session.query();
-                debug!("Server response {:?}", server_response);
-                debug!("Server response len {}", server_response.keys().len());
+                // debug!("Server response {:?}", server_response);
+                // debug!("Server response len {}", server_response.keys().len());
                 session.store_server_response(&server_response);
                 thread::sleep(time::Duration::from_millis(RETRY_TIMEOUT));
-                debug!("All stored messages {:?}", session.state.stored_messages);
+                // debug!("All stored messages {:?}", session.state.stored_messages);
             }
         }
     }

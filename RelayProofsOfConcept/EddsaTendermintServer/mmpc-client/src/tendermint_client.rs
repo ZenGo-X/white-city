@@ -62,15 +62,21 @@ impl<T: Peer> SessionClient<T> {
             missing_clients: missing_clients,
         };
         let tx = serde_json::to_string(&request).unwrap();
-        let response = self.client.abci_query(None, tx, None, false).unwrap();
-        debug!("RawResponse: {:?}", response);
-        let server_response = response.log;
-        let server_response: BTreeMap<u32, ClientMessage> =
-            match serde_json::from_str(&server_response.to_string()) {
-                Ok(server_response) => server_response,
-                Err(_) => BTreeMap::new(),
-            };
-        return server_response;
+        match self.client.abci_query(None, tx, None, false) {
+            Ok(response) => {
+                let response_log = response.log;
+                let server_response: BTreeMap<u32, ClientMessage> =
+                    match serde_json::from_str(&response_log.to_string()) {
+                        Ok(server_response) => server_response,
+                        Err(_) => BTreeMap::new(),
+                    };
+                server_response
+            }
+            Err(_) => {
+                warn!("Query not successful, returning empty message");
+                BTreeMap::new()
+            }
+        }
     }
 
     pub fn register(&mut self, index: u32, capacity: u32, kg_index: i32) -> ServerMessage {
@@ -80,7 +86,7 @@ impl<T: Peer> SessionClient<T> {
         // No index to begin with
         msg.set_register(client_addr, self.state.protocol_id, capacity, kg_index);
 
-        debug!("Regsiter message {:?}", msg);
+        debug!("Register message {:?}", msg);
         let tx =
             tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
         let response = self.client.broadcast_tx_commit(tx).unwrap();
@@ -99,11 +105,19 @@ impl<T: Peer> SessionClient<T> {
         debug!("Sending message {:?}", msg);
         let tx =
             tendermint::abci::transaction::Transaction::new(serde_json::to_string(&msg).unwrap());
-        let response = self.client.broadcast_tx_commit(tx).unwrap();
-        let server_response = response.clone().deliver_tx.log.unwrap();
-        debug!("ServerResponse {:?}", server_response);
-        let server_response: BTreeMap<u32, ClientMessage> =
-            serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
+        let server_response = match self.client.broadcast_tx_commit(tx) {
+            Ok(response) => {
+                let server_response = response.clone().deliver_tx.log.unwrap();
+                debug!("ServerResponse {:?}", server_response);
+                let server_response: BTreeMap<u32, ClientMessage> =
+                    serde_json::from_str(&response.deliver_tx.log.unwrap().to_string()).unwrap();
+                server_response
+            }
+            Err(_) => {
+                warn!("Unable to include message in block, returning empty response");
+                BTreeMap::new()
+            }
+        };
         return server_response;
     }
 
@@ -198,7 +212,7 @@ impl<T: Peer> State<T> {
             protocol_id,
             client_addr,
             last_message: ClientMessage::new(),
-            bc_dests: (1..(capacity + 1)).collect(),
+            bc_dests: vec![0],
             data_manager: data_m,
             stored_messages: StoredMessages::new(),
         }
