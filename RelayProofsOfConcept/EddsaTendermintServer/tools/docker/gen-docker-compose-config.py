@@ -35,7 +35,7 @@ def print_node(i):
       - ./build:/tendermint:Z
     networks:
       localnet:
-        ipv4_address: 192.167.10.2
+        ipv4_address: 192.167.10."""+str(2+i)+"""
 """
 
 
