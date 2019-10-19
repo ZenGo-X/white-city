@@ -11,6 +11,8 @@ Follows https://tendermint.com/docs/networks/docker-compose.html#requirements
 
 ## Run 
 
+edit `NODENUM` in `start-tendermint-local-testnet.sh`
+
 ```
 ./start-tendermint-local-testnet.sh
 ```
