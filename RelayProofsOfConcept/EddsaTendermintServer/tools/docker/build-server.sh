@@ -1,1 +1,1 @@
-docker build ./Dockerfiles/server
+docker-compose build .
