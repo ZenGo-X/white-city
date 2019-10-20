@@ -8,13 +8,15 @@ Follow the installation guide for your system at [tendermint github](https://git
 
 0. Create an initial configuration file for a single node `tendermint init`
 
-1. Reset tendermint state with `tendermint unsafe_reset_all`
+1. Build the repository with `cargo build --all`. This creates executables for both the server and client side
 
-2. Run Tendermint node: `tendermint node`
+2. Reset tendermint state with `tendermint unsafe_reset_all`
 
-3. In a separate terminal window, run the application: `cargo run`
+3. Run Tendermint node: `tendermint node`
 
-4. In yet another terminal window, run the key generation demo `./kg-demo.sh`
+4. In a separate terminal window, run the application: `cargo run`
+
+5. In yet another terminal window, run the key generation demo `./kg-demo.sh`
 
 You can set the parameter of the number of clients runnig the protocol in `kg-demo.sh`
 
@@ -32,6 +34,10 @@ Reset the tendermint cluster with
 `./tools/local-cluster-reset.sh`
 
 In the demo 5 clients create a threshold signature. A cluster of 4 nodes runs the protocol, after node 3 fails, the protocol still completes successfully.
+
+To run the signing demo, the SMR state needs to be restarted.
+Run `./tools/local-cluster-reset.sh`  
+Then `./tools/sign-demo.sh`
 
 ![demo](./demo/tendermint-demo.gif)
 

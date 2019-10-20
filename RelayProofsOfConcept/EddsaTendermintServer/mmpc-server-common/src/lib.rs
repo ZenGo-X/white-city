@@ -269,7 +269,7 @@ impl ClientMessage {
         }
     }
 
-    pub fn register(
+    pub fn set_register(
         &mut self,
         addr: SocketAddr,
         protocol_id: ProtocolIdentifier,

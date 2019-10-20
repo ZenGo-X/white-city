@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
-use relay_server_common::common::{NOT_A_PEER, STATE_NOT_INITIALIZED};
-use relay_server_common::{ClientMessage, StoredMessages};
-use relay_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
+use mmpc_server_common::common::{NOT_A_PEER, STATE_NOT_INITIALIZED};
+use mmpc_server_common::{ClientMessage, StoredMessages};
+use mmpc_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
 
-use relay_server_common::protocol::ProtocolDescriptor;
+use mmpc_server_common::protocol::ProtocolDescriptor;
 
 #[derive(Clone, Debug)]
 pub struct Peer {
@@ -119,7 +119,7 @@ impl RelaySession {
             // check that the protocol is valid
             RelaySessionState::Empty => {
                 debug!("Checking if protocol description is valid");
-                if !relay_server_common::protocol::is_valid_protocol(&protocol) {
+                if !mmpc_server_common::protocol::is_valid_protocol(&protocol) {
                     warn!("Protocol is invalid");
 
                     return false;
@@ -154,7 +154,7 @@ impl RelaySession {
             active_peers: Arc::new(RwLock::new(0)),
 
             protocol: Arc::new(RwLock::new(
-                relay_server_common::protocol::ProtocolDescriptor::new(0, capacity),
+                mmpc_server_common::protocol::ProtocolDescriptor::new(0, capacity),
             )),
 
             state: Arc::new(RwLock::new(RelaySessionState::Empty)),
@@ -172,27 +172,13 @@ impl RelaySession {
         debug!("Server state: {:?}", self.state());
         debug!("Turn of peer #: {:}", self.protocol().next());
 
-        match self.state() {
-            RelaySessionState::Initialized => {
-                debug!("Relay sessions state is initialized");
-            }
-            _ => {
-                debug!("Relay sessions state is not initialized");
-                return Err(STATE_NOT_INITIALIZED);
-            }
-        }
-        // validate the sender in the message (peer_number field) is the peer associated with this address
-        let peer = self.get_peer_by_address(from);
+        // TODO: Add some checks of what messages can be stored
 
-        // if peer is present and registered
-        if let Some(_p) = peer {
-            return Ok(());
-        }
-        return Err(NOT_A_PEER);
+        return Ok(());
     }
 
     /// get a copy of Peer that addr represents
-    pub fn get_peer_by_address(&self, addr: &SocketAddr) -> Option<Peer> {
+    fn get_peer_by_address(&self, addr: &SocketAddr) -> Option<Peer> {
         match self.peers.read().unwrap().get(addr) {
             Some(p) => match p.registered {
                 true => Some(p.clone()),
@@ -258,8 +244,8 @@ mod tests {
     use super::RelaySession;
     use super::RelaySessionState;
 
-    use relay_server_common::protocol::ProtocolDescriptor;
-    use relay_server_common::ProtocolIdentifier;
+    use mmpc_server_common::protocol::ProtocolDescriptor;
+    use mmpc_server_common::ProtocolIdentifier;
 
     use std::net::SocketAddr;
     use std::sync::Arc;
@@ -360,6 +346,5 @@ mod tests {
         let messages = rs.register_new_peer(client_addr, protocol_id, capacity, -1);
         // Once all are connected, state should initialize
         assert_eq!(RelaySessionState::Initialized, rs.state());
-        // TODO
     }
 }
