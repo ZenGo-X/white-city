@@ -141,6 +141,7 @@ fn main() {
 
     setup_logging(verbosity, client_index).expect("failed to initialize logging.");
 
+    let start_time = time::SystemTime::now();
     let port = 8080 + client_index;
     let proxy_addr = format!("tcp://{}", proxy);
     let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
@@ -173,10 +174,12 @@ fn main() {
             {
                 session.handle_relay_message(msg.clone());
             }
-            return;
+            break;
         }
         let server_response = session.query();
         session.store_server_response(&server_response);
         thread::sleep(time::Duration::from_millis(RETRY_TIMEOUT));
     }
+    let total_time = start_time.elapsed().expect("Weird time");
+    println!("{:?}", total_time);
 }

@@ -1,14 +1,18 @@
 import argparse
+import os
+import stat
 
 HELP_MESSAGE = """
 Config generator for experiments
 """
 
 def create_init_file(nodes):
-    init_line = 'tendermint testnet --v {0} --o ~/.tendermint/cluster{0}/'.format(nodes)
-    with open('./tools/local-cluster-init-{}.sh'.format(nodes),
+    init_file_name = './tools/local-cluster-init-{}.sh'.format(nodes)
+    with open(init_file_name,
               'w') as init_file:
-        init_file.write(init_line)
+        init_file.write('tendermint testnet --v {0} --o ~/.tendermint/cluster{0}/'.format(nodes))
+    st = os.stat(init_file_name)
+    os.chmod(init_file_name, st.st_mode | stat.S_IEXEC)
 
 
 def create_start_file(nodes):
@@ -17,11 +21,11 @@ def create_start_file(nodes):
         p2p_port_start = 46056
         for node in range(nodes - 1):
             p2p_port = p2p_port_start + node * 100
-            node_config = '$(tendermint show_node_id --home $HOME/.tendermint/cluster4/node0)"@127.0.0.1:{},"\\'.format(p2p_port)
+            node_config = '$(tendermint show_node_id --home $HOME/.tendermint/cluster{0}/node0)"@127.0.0.1:{1},"\\'.format(nodes,p2p_port)
             config_lines.append(node_config + '\n')
         # Last line without \
         p2p_port = p2p_port_start + (nodes - 1) * 100
-        node_config = '$(tendermint show_node_id --home $HOME/.tendermint/cluster4/node0)"@127.0.0.1:{}"'.format(p2p_port)
+        node_config = '$(tendermint show_node_id --home $HOME/.tendermint/cluster{0}/node0)"@127.0.0.1:{1}"'.format(nodes, p2p_port)
         config_lines.append(node_config + '\n')
         return config_lines
 
@@ -47,39 +51,50 @@ def create_start_file(nodes):
             node_lines.append(line)
         return node_lines
 
-    with open('./tools/local-cluster-start-{}.sh'.format(nodes),
+    start_file_name = './tools/local-cluster-start-{}.sh'.format(nodes)
+    with open(start_file_name,
               'w') as start_file:
         start_file.write('CWD=`dirname $0`' + '\n')
         start_file.write('TM_PERSISTENT_PEERS=\\' + '\n')
         start_file.writelines(persisnent_peers(nodes))
         start_file.writelines(app_tmux_sessions(nodes))
         start_file.writelines(node_tmux_sessions(nodes))
+    st = os.stat(start_file_name)
+    os.chmod(start_file_name, st.st_mode | stat.S_IEXEC)
 
 
 def create_stop_file(nodes):
-    with open('./tools/local-cluster-stop-{}.sh'.format(nodes),
+    stop_file_name = './tools/local-cluster-stop-{}.sh'.format(nodes)
+    with open(stop_file_name,
               'w') as stop_file:
         for node in range(nodes):
             stop_file.write('tmux kill-session -t app{}'.format(node) + '\n')
             stop_file.write('tmux kill-session -t node{}'.format(node) + '\n')
         stop_file.write('pgrep tendermint | xargs kill -KILL')
+    st = os.stat(stop_file_name)
+    os.chmod(stop_file_name, st.st_mode | stat.S_IEXEC)
 
 def create_delete_file(nodes):
-    with open('./tools/local-cluster-delete-{}.sh'.format(nodes),
+    delete_file_name = './tools/local-cluster-delete-{}.sh'.format(nodes)
+    with open(delete_file_name,
               'w') as delete_file:
         delete_file.write('CWD=`dirname $0`' + '\n')
-        delete_file.write('$CWD/local-cluster-stop.sh' + '\n')
+        delete_file.write('$CWD/local-cluster-stop-{}.sh'.format(nodes) + '\n')
         delete_file.write('rm -rf ~/.tendermint/cluster{}'.format(nodes))
+    st = os.stat(delete_file_name)
+    os.chmod(delete_file_name, st.st_mode | stat.S_IEXEC)
 
 
 def create_reset_file(nodes):
-    with open('./tools/local-cluster-reset-{}.sh'.format(nodes),
-              'w') as reset_file:
+    reset_file_name = './tools/local-cluster-reset-{}.sh'.format(nodes)
+    with open(reset_file_name, 'w') as reset_file:
         reset_file.write('CWD=`dirname $0`' + '\n')
 
-        reset_file.write('$CWD/local-cluster-delete.sh' + '\n')
-        reset_file.write('$CWD/local-cluster-init.sh' + '\n')
-        reset_file.write('$CWD/local-cluster-start.sh' + '\n')
+        reset_file.write('$CWD/local-cluster-delete-{}.sh'.format(nodes) + '\n')
+        reset_file.write('$CWD/local-cluster-init-{}.sh'.format(nodes) + '\n')
+        reset_file.write('$CWD/local-cluster-start-{}.sh'.format(nodes) + '\n')
+    st = os.stat(reset_file_name)
+    os.chmod(reset_file_name, st.st_mode | stat.S_IEXEC)
 
 
 def main():
