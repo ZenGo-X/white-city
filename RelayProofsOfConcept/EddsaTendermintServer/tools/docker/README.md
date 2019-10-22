@@ -14,5 +14,5 @@ Follows https://tendermint.com/docs/networks/docker-compose.html#requirements
 To start 7 tendermint validator nodes
 
 ```
-./start-tendermint-local-testnet.sh 7
+./tools/docker/start-tendermint-local-testnet.sh 7
 ```

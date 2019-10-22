@@ -2,6 +2,7 @@
 
 cp $GOPATH/src/github.com/tendermint/tendermint/Makefile $GOPATH/src/github.com/tendermint/tendermint/Makefile.bak
 cp $GOPATH/src/github.com/tendermint/tendermint/docker-compose.yml $GOPATH/src/github.com/tendermint/tendermint/docker-compose.yml.bak
+cp ./Dockerfiles/tendermint/localnode_Dockerfile $GOPATH/src/github.com/tendermint/tendermint/networks/local/localnode/Dockerfile
 cp ./tools/docker/tendermint_Makefile $GOPATH/src/github.com/tendermint/tendermint/Makefile
 cp ./tools/docker/docker-compose.yml $GOPATH/src/github.com/tendermint/tendermint/docker-compose.yml
 
