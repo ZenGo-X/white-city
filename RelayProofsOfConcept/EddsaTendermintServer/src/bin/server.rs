@@ -10,7 +10,7 @@
 //! this will run a client that utilizes the server in some way
 //!
 use clap::{App, Arg, ArgMatches};
-use relay_server::RelayApp;
+use mmpc_server::RelayApp;
 use std::io;
 use std::net::SocketAddr;
 
@@ -40,7 +40,7 @@ fn arg_matches<'a>() -> ArgMatches<'a> {
         .get_matches()
 }
 
-fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
+fn setup_logging(verbosity: u64, port: String) -> Result<(), fern::InitError> {
     let mut base_config = fern::Dispatch::new();
 
     base_config = match verbosity {
@@ -50,7 +50,9 @@ fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
         1 => base_config
             .level(log::LevelFilter::Debug)
             .level_for("tokio_core", log::LevelFilter::Warn) // filter out tokio
-            .level_for("tokio_reactor", log::LevelFilter::Warn),
+            .level_for("tokio_reactor", log::LevelFilter::Warn)
+            .level_for("hyper", log::LevelFilter::Warn)
+            .level_for("abci::server", log::LevelFilter::Warn),
         _2_or_more => base_config.level(log::LevelFilter::Trace),
     };
 
@@ -66,7 +68,7 @@ fn setup_logging(verbosity: u64) -> Result<(), fern::InitError> {
                 message
             ))
         })
-        .chain(fern::log_file("relay-server.log")?);
+        .chain(fern::log_file(format!("relay-server-{}.log", port))?);
 
     let stdout_config = fern::Dispatch::new()
         .format(|out, message, record| {
@@ -112,9 +114,11 @@ fn main() {
         .parse()
         .expect("Invalid number of participants");
 
+    let port = addr.port().to_string();
+
     let verbosity: u64 = matches.occurrences_of("verbose");
 
-    setup_logging(verbosity).expect("failed to initialize logging.");
+    setup_logging(verbosity, port).expect("failed to initialize logging.");
 
     abci::run(addr, RelayApp::new(capacity));
 }

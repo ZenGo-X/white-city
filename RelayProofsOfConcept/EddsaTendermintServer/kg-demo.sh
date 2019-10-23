@@ -3,12 +3,14 @@ echo "$0: MP-EDDSA"
 
 rm keys?
 rm keys??
+rm log-kg*.log
+rm log-error*.log
 
 n=3
 
 echo "keygen part"
 for i in $(seq 1 $n);
 do
-    cargo run --example keygen-client -- -I $i -P $n &
-    # sleep 0.1
+    #cargo run -p mmpc-client --bin kg-client -- -I $i --capacity $n -v &
+    cargo run -p mmpc-client --bin kg-client -- -I $i --capacity $n &
 done

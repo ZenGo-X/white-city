@@ -1,5 +1,5 @@
 [package]
-name = "relay-server-common"
+name = "mmpc-server-common"
 version = "0.1.0"
 authors = ["Avi <kozokinavi@gmail.com>", "Alex Manuskin <amanusk@protonmail.com>"]
 edition = "2018"
