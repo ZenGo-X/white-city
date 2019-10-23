@@ -20,6 +20,10 @@ Cargo.lock
 *rusty-tags.vi
 */rusty-tags.vi
 
+tools/local-cluster-*.sh
+full-exp*
+
+*.csv
 
 keys*
 signature*

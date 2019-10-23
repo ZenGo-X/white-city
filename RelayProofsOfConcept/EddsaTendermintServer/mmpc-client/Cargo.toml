@@ -17,6 +17,7 @@ serde_json = "1.0"
 subtle-encoding = { version = "0.3", features = ["bech32-preview"] }
 better-panic = "0.1.2"
 time= "0.1.42"
+csv = "1.1.1"
 
 mmpc-server-common = { path = "../mmpc-server-common" }
 
