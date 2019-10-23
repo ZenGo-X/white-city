@@ -12,7 +12,8 @@ cd $GOPATH/src/github.com/tendermint/tendermint
 make build-linux
 
 # (optionally) Build tendermint/localnode image
-make build-docker-localnode
+# it will be called by "make localnet-start" eventually, so no need to call it explicitly 
+# make build-docker-localnode
 
 sudo rm -rf ./build/node*
 
