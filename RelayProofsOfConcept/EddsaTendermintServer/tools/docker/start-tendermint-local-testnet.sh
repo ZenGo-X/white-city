@@ -1,8 +1,10 @@
 ./tools/docker/gen-docker-compose-config.py $1 > ./tools/docker/docker-compose.yml
 
+# if not to commit empty blocks
+# cp ./Dockerfiles/tendermint/localnode_Dockerfile $GOPATH/src/github.com/tendermint/tendermint/networks/local/localnode/Dockerfile
+
 cp $GOPATH/src/github.com/tendermint/tendermint/Makefile $GOPATH/src/github.com/tendermint/tendermint/Makefile.bak
 cp $GOPATH/src/github.com/tendermint/tendermint/docker-compose.yml $GOPATH/src/github.com/tendermint/tendermint/docker-compose.yml.bak
-cp ./Dockerfiles/tendermint/localnode_Dockerfile $GOPATH/src/github.com/tendermint/tendermint/networks/local/localnode/Dockerfile
 cp ./tools/docker/tendermint_Makefile $GOPATH/src/github.com/tendermint/tendermint/Makefile
 cp ./tools/docker/docker-compose.yml $GOPATH/src/github.com/tendermint/tendermint/docker-compose.yml
 
