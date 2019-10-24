@@ -4,10 +4,10 @@ where_am_i=$(pwd)
 cargo build --all
 docker-compose build
 
-# ./tools/docker/gen-docker-compose-config.py $1 > ./tools/docker/docker-compose.yml
+./tools/docker/gen-docker-compose-config.py $1 > ./tools/docker/docker-compose.yml
 
 # if not to commit empty blocks
-cp ./Dockerfiles/tendermint/localnode $GOPATH/src/github.com/tendermint/tendermint/networks/local/localnode/Dockerfile
+# cp ./Dockerfiles/tendermint/localnode $GOPATH/src/github.com/tendermint/tendermint/networks/local/localnode/Dockerfile
 # if to commit empty blocks
 cp ./Dockerfiles/tendermint/localnode_empty $GOPATH/src/github.com/tendermint/tendermint/networks/local/localnode/Dockerfile
 

@@ -27,7 +27,7 @@ def print_node(i):
     container_name: node"""+str(i)+"""
     image: "tendermint/localnode"
     ports:
-      - \""""+str(26656+2*i+(1 if i>0 else 0))+"""-"""+str(26657+2*i+(1 if i>0 else 0))+""":26656-26657"
+      - \""""+str(26656+3*i)+"""-"""+str(26658+3*i)+""":26656-26658"
     environment:
       - ID="""+str(i)+"""
       - LOG=${LOG:-tendermint.log}
