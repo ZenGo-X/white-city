@@ -9,15 +9,7 @@ HELP_MESSAGE = """
 Run local kg and sign experiments
 """
 
-def get_max_run_time(parties, read_filename, write_filename):
-    print("################ GETTING DATA #######################")
-    with open(read_filename, mode='r') as csv_file:
-        times = list()
-        csv_reader = csv.DictReader(csv_file)
-        for row in csv_reader:
-            times.append(row["millis"])
-        max_time = max(times)
-
+def write_result(parties, write_filename, max_time):
     file_exists = os.path.isfile(write_filename)
     with open(write_filename, 'a') as csvfile:
         fieldnames = ["parties", "time"]
@@ -27,35 +19,51 @@ def get_max_run_time(parties, read_filename, write_filename):
             writer.writeheader()  # file doesn't exist yet, write a header
         writer.writerow(csv_dict)
 
+def get_max_run_time(parties, read_filename):
+    print("################ GETTING DATA #######################")
+    with open(read_filename, mode='r') as csv_file:
+        times = list()
+        csv_reader = csv.DictReader(csv_file)
+        for row in csv_reader:
+            times.append(row["millis"])
+        max_time = max(times)
+        return max_time
+
+
 def main():
 
     def run_exps(exp_type, nodes, parties):
-        exp_filename = "./exp-{}-{}.csv".format(exp_type, parties)
-        try:
-            os.remove(exp_filename)
-        except:
-            pass
-        subprocess.call(["python", "generate.py", "-n", str(nodes)])
-        reset_tool = "./tools/local-cluster-reset-{}.sh".format(nodes)
-        subprocess.call(["sh", reset_tool])
-        sleep_time = max(int(nodes), 10)
-        # Give time for all nodes to connect
-        time.sleep(sleep_time)
-        tool = "./tools/{}-demo.sh".format(exp_type)
-        subprocess.call(["sh", tool, str(nodes), str(parties)])
-        sleep_time = 20
-        if exp_type is "kg":
-            sleep_time = max(int(parties/2), 20)
-        elif exp_type is "sign":
-            sleep_time = max(int(parties * 1.5), 20)
-        time.sleep(sleep_time)
-        write_filename = "./full-exp-{}-{}.csv".format(exp_type, nodes)
-        get_max_run_time(parties, exp_filename, write_filename)
+        max_vec = list()
+        for i in range(3):
+            exp_filename = "./exp-{}-{}.csv".format(exp_type, parties)
+            try:
+                os.remove(exp_filename)
+            except:
+                pass
+            subprocess.call(["python", "generate.py", "-n", str(nodes)])
+            reset_tool = "./tools/local-cluster-reset-{}.sh".format(nodes)
+            subprocess.call(["sh", reset_tool])
+            sleep_time = max(int(nodes), 10)
+            # Give time for all nodes to connect
+            time.sleep(sleep_time)
+            tool = "./tools/{}-demo.sh".format(exp_type)
+            subprocess.call(["sh", tool, str(nodes), str(parties)])
+            sleep_time = 20
+            if exp_type is "kg":
+                sleep_time = max(int(parties/2), 20)
+            elif exp_type is "sign":
+                sleep_time = max(int(parties * 1.5), 20)
+            time.sleep(sleep_time)
+            write_filename = "./full-exp-{}-{}.csv".format(exp_type, nodes)
+            max_vec.append(int(get_max_run_time(parties, exp_filename)))
+        avg = int(sum(max_vec) / len(max_vec))
+        write_result(parties, write_filename, avg)
 
     args = get_args()
-    nodes_range = [4, 2, 1]
+    #nodes_range = [4, 2, 1]
+    nodes_range = [4]
     #parties_range = [8, 4]
-    parties_range = range(240, 120, -10)
+    parties_range = range(20, 0, -10)
     if args.nodes:
         nodes_range = [args.nodes]
     if args.parties:

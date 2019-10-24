@@ -14,7 +14,7 @@ k=${2:-4}
 cargo build --all
 
 echo "keygen part"
-for i in $(seq 1 $((k - 1)) );
+for i in $(seq 1 $k);
 do
     S=$(( ( RANDOM % $n ) ))
     PORT=$(( 46057 + $S * 100 ))
@@ -23,5 +23,3 @@ do
     #./target/debug/kg-client -I $i -C $n --proxy 127.0.0.1:$PORT &> log-error$i.log &
     ./target/debug/kg-client -I $i -C $k --proxy 127.0.0.1:$PORT &
 done
-    ./target/debug/kg-client -I $k -C $k --proxy 127.0.0.1:$PORT
-    echo "PROGRAM FINISHED"
