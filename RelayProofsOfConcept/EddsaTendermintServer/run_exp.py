@@ -42,13 +42,14 @@ def main():
         time.sleep(sleep_time)
         tool = "./tools/{}-demo.sh".format(exp_type)
         subprocess.call(["sh", tool, str(nodes), str(parties)])
-        time.sleep(parties)
+        sleep_time = max(int(nodes * 3), 10)
+        time.sleep(sleep_time)
         write_filename = "./full-exp-{}-{}.csv".format(exp_type, nodes)
         get_max_run_time(parties, exp_filename, write_filename)
 
     args = get_args()
-    nodes_range = [1, 2, 4]
-    parties_range = [4, 8]
+    nodes_range = [4, 2, 1]
+    parties_range = [8, 4]
     if args.nodes:
         nodes_range = [args.nodes]
     if args.parties:
@@ -56,6 +57,8 @@ def main():
     for nodes in nodes_range:
         for parties in parties_range:
             run_exps("kg", nodes, parties)
+            time.sleep(max(parties, 10))
+            run_exps("sign", nodes, parties)
 
 
 def get_args():

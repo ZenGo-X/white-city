@@ -8,11 +8,11 @@ use std::{thread, time};
 
 use clap::{App, Arg, ArgMatches};
 use log::debug;
+use serde::Serialize;
 
 use mmpc_client::eddsa_peer_kg::EddsaPeer;
 use mmpc_client::peer::Peer;
 use mmpc_client::tendermint_client::SessionClient;
-use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 struct Record {
