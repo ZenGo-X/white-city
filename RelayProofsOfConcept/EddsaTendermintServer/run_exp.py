@@ -25,7 +25,7 @@ def get_max_run_time(parties, read_filename):
         times = list()
         csv_reader = csv.DictReader(csv_file)
         for row in csv_reader:
-            times.append(row["millis"])
+            times.append(int(row["millis"]))
         max_time = max(times)
         return max_time
 
@@ -61,9 +61,9 @@ def main():
 
     args = get_args()
     #nodes_range = [4, 2, 1]
-    nodes_range = [4]
+    nodes_range = [2]
     #parties_range = [8, 4]
-    parties_range = range(20, 0, -10)
+    parties_range = range(180, 0, -10)
     if args.nodes:
         nodes_range = [args.nodes]
     if args.parties:
