@@ -1,8 +1,8 @@
 where_am_i=$(pwd)
 # echo "$where_am_i"
-# cd $where_am_i
 
-make server
+cargo build --all
+docker-compose build
 
 # ./tools/docker/gen-docker-compose-config.py $1 > ./tools/docker/docker-compose.yml
 
