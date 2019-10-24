@@ -10,6 +10,7 @@ Run local kg and sign experiments
 """
 
 def get_max_run_time(parties, read_filename, write_filename):
+    print("################ GETTING DATA #######################")
     with open(read_filename, mode='r') as csv_file:
         times = list()
         csv_reader = csv.DictReader(csv_file)
@@ -42,7 +43,11 @@ def main():
         time.sleep(sleep_time)
         tool = "./tools/{}-demo.sh".format(exp_type)
         subprocess.call(["sh", tool, str(nodes), str(parties)])
-        sleep_time = max(int(nodes * 3), 10)
+        sleep_time = 20
+        if exp_type is "kg":
+            sleep_time = max(int(parties/2), 20)
+        elif exp_type is "sign":
+            sleep_time = max(int(parties * 1.5), 20)
         time.sleep(sleep_time)
         write_filename = "./full-exp-{}-{}.csv".format(exp_type, nodes)
         get_max_run_time(parties, exp_filename, write_filename)
@@ -50,7 +55,7 @@ def main():
     args = get_args()
     nodes_range = [4, 2, 1]
     #parties_range = [8, 4]
-    parties_range = range(120, 0, -10)
+    parties_range = range(240, 120, -10)
     if args.nodes:
         nodes_range = [args.nodes]
     if args.parties:
@@ -58,7 +63,6 @@ def main():
     for nodes in nodes_range:
         for parties in parties_range:
             run_exps("kg", nodes, parties)
-            time.sleep(max(parties, 10))
             run_exps("sign", nodes, parties)
 
 

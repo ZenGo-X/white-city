@@ -4,15 +4,15 @@ build:
 clean:
 	rm log*.log
 	rm relay-server*.log
-	rm signature*
 	rm keys*
+	rm signature*
 
 clean-exp:
-	rm exp-sign*
 	rm exp-kg*
+	rm exp-sign*
 
 clean-all: clean clean-exp
-	rm exp-full
+	rm full-exp*
 
 kill:
 	pgrep tendermint | xargs kill -KILL
