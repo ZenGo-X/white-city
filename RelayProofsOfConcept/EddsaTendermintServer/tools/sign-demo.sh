@@ -1,8 +1,7 @@
 echo "$0: MP-EDDSA"
 #clean
 
-rm signature?
-rm signature??
+rm signature*
 rm log*.log
 
 # First argument is the number fo nodes in the cluseter

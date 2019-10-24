@@ -49,7 +49,8 @@ def main():
 
     args = get_args()
     nodes_range = [4, 2, 1]
-    parties_range = [8, 4]
+    #parties_range = [8, 4]
+    parties_range = range(120, 0, -10)
     if args.nodes:
         nodes_range = [args.nodes]
     if args.parties:
