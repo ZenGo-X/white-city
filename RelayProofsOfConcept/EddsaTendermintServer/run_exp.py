@@ -61,7 +61,9 @@ def main():
                 sleep_time = max(int(parties * 1.5), 20)
             time.sleep(sleep_time)
             write_filename = "./full-exp-{}-{}.csv".format(exp_type, nodes)
-            max_vec.append(int(get_max_run_time(parties, exp_filename)))
+            val = int(get_max_run_time(parties, exp_filename))
+            if val != 0:
+                max_vec.append()
         avg = int(sum(max_vec) / len(max_vec))
         write_result(parties, write_filename, avg)
 
