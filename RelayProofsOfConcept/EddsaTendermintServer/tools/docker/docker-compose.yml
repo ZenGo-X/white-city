@@ -19,7 +19,7 @@ services:
   node1:
     container_name: node1
     image: "tendermint/localnode"
-    command: ["node", "--proxy_app", "tcp://192.167.11.2:26658", "kvstore", "--consensus.create_empty_blocks=false"]
+    command: ["node", "--proxy_app", "tcp://192.167.11.3:26658", "kvstore", "--consensus.create_empty_blocks=false"]
     ports:
       - "26658-26659:26656-26657"
     environment:
@@ -34,6 +34,9 @@ services:
   app0:
     container_name: app0
     image: "eddsatendermintserver_server"
+    depends_on:
+        - node0
+        - node1
     command: ["/target/release/server", "--address", "192.167.11.2:26658"]
     ports:
       - "36656:26658"
@@ -44,6 +47,9 @@ services:
   app1:
     container_name: app1
     image: "eddsatendermintserver_server"
+    depends_on:
+        - node0
+        - node1
     command: ["/target/release/server", "--address", "192.167.11.3:26658"]
     ports:
       - "36657:26658"
