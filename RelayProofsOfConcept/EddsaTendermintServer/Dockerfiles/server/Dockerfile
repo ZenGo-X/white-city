@@ -1,23 +1,9 @@
-# select image
-FROM rust:latest
+FROM ubuntu:latest
 
-WORKDIR /eddsatendermintserver
+WORKDIR /
 
-COPY ./ ./
-
-# this build step will cache your dependencies
-RUN cargo build --release
-
-# build for release
-RUN rm ./target/release/deps/eddsatendermintserver*
-RUN cargo build --release
-
-# set the startup command to run your binary
-CMD ["./target/release/eddsatendermintserver"]
+COPY ./ /
 
 # VOLUME [ / ]
-# WORKDIR /
-# EXPOSE 80
-# COPY target/release/server /server
-# CMD ["cargo", "run", "--address", "127.0.0.1:26658"]
+EXPOSE 26658
 STOPSIGNAL SIGTERM

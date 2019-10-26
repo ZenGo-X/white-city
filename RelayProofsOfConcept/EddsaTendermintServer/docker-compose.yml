@@ -5,9 +5,3 @@ services:
     build:
       context: .
       dockerfile: Dockerfiles/server/Dockerfile
-    # command:
-    #     bash -c "ls"
-    # volumes:
-    #   - .:/code
-    # expose:
-    #   - "8000"

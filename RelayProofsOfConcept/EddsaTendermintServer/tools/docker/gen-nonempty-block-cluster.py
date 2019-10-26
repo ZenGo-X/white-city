@@ -26,8 +26,9 @@ def print_node(i):
     print """  node"""+str(i)+""":
     container_name: node"""+str(i)+"""
     image: "tendermint/localnode"
+    command: ["node", "--proxy_app", "tcp://192.167.11.2:26658", "kvstore"]
     ports:
-      - \""""+str(26656+3*i)+"""-"""+str(26658+3*i)+""":26656-26658"
+      - \""""+str(26656+2*i)+"""-"""+str(26657+2*i)+""":26656-26657"
     environment:
       - ID="""+str(i)+"""
       - LOG=${LOG:-tendermint.log}
@@ -39,10 +40,25 @@ def print_node(i):
 """
 
 
+def print_app(i):
+    print """  app"""+str(i)+""":
+    container_name: app"""+str(i)+"""
+    image: "eddsatendermintserver_server"
+    command: ["/target/release/server", "--address", "192.167.11."""+str(2+i)+""":26658"]
+    ports:
+      - \""""+str(36656+i)+""":26658"
+    networks:
+      localnet:
+        ipv4_address: 192.167.11."""+str(2+i)+"""
+"""
+
+
 def main():
     print_header()
     for i in range(node_num):
         print_node(i)
+    for i in range(node_num):
+        print_app(i)
     print_tailer()        
 
 
