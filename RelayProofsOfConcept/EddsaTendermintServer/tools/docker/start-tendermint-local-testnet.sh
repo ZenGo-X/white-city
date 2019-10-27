@@ -8,7 +8,7 @@ cargo build --all --release
 docker-compose build
 
 # if empty block
-./tools/docker/gen-empty-block-cluster.py $1 > ./tools/docker/docker-compose.yml
+./tools/docker/gen-empty-block-cluster.py $1 $2 > ./tools/docker/docker-compose.yml
 
 # if nonempty block
 # ./tools/docker/gen-nonempty-block-cluster.py $1 > ./tools/docker/docker-compose.yml

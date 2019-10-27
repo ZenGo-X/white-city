@@ -1,6 +1,9 @@
 #!/usr/bin/env python2
 import sys
-node_num = int(sys.argv[1])
+import random
+
+NODE_NUM = int(sys.argv[1])
+CLIENT_NUM = int(sys.argv[2])
 
 
 def print_header():
@@ -56,12 +59,30 @@ def print_node(i, n):
 """
 
 
+def print_kg(i, c, n):
+    random.seed()
+    assigned_to = random.randint(0, n-1)
+    print """  kg"""+str(i)+""":
+    container_name: kg"""+str(i)+"""
+    image: "white-city.eddsatendermint"
+    depends_on:"""
+    for x in range(n):
+        print """        - node"""+str(x)+""""""
+    print """    command: ["/wait-for-it.sh", "192.167.10."""+str(assigned_to+2)+""":26657", "--", "/kg-client", "-I", \""""+ str(i) +"""\", "-C", \""""+str(c)+"""\", "--proxy", "192.167.10."""+str(assigned_to+2)+""":26657"]
+    networks:
+      localnet:
+        ipv4_address: 192.167.11."""+str(2+i)+"""
+"""
+
+
 def main():
     print_header()
-    for i in range(node_num):
-        print_app(i, node_num)
-    for i in range(node_num):
-        print_node(i, node_num)
+    for i in range(NODE_NUM):
+        print_app(i, NODE_NUM)
+    for i in range(NODE_NUM):
+        print_node(i, NODE_NUM)
+    for i in range(CLIENT_NUM):
+        print_kg(i, CLIENT_NUM, NODE_NUM)
     print_tailer()        
 
 
