@@ -4,6 +4,7 @@ import random
 
 NODE_NUM = int(sys.argv[1])
 CLIENT_NUM = int(sys.argv[2])
+ACTION = sys.argv[3]
 
 
 def print_header():
@@ -79,14 +80,36 @@ def print_kg(i, c, n):
 """
 
 
+def print_sign(i, c, n):
+    random.seed()
+    assigned_to = random.randint(0, n-1)
+    print """  sign"""+str(i)+""":
+    container_name: sign"""+str(i)+"""
+    image: "white-city.eddsatendermint"
+    depends_on:"""
+    for x in range(n):
+        print """        - node"""+str(x)+""""""
+    print """    command: bash -c "cp /eddsatendermint/data/keys* ./ && ./wait-for-it.sh 192.167.10."""+str(assigned_to+2)+""":26657 -- ./sign-client -I """+ str(i+1) +""" -C """+str(c)+""" -M "message" --proxy 192.167.10."""+str(assigned_to+2)+""":26657 && cp ./signature* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
+    networks:
+      localnet:
+        ipv4_address: 192.167.11."""+str(2+i)+"""
+"""
+
+
 def main():
     print_header()
     for i in range(NODE_NUM):
         print_app(i, NODE_NUM)
     for i in range(NODE_NUM):
         print_node(i, NODE_NUM)
-    for i in range(CLIENT_NUM):
-        print_kg(i, CLIENT_NUM, NODE_NUM)
+    if ACTION == "kg":
+        for i in range(CLIENT_NUM):
+            print_kg(i, CLIENT_NUM, NODE_NUM)
+    if ACTION == "sign":
+        for i in range(CLIENT_NUM):
+            print_sign(i, CLIENT_NUM, NODE_NUM)
     print_tailer()        
 
 

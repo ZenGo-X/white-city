@@ -11,8 +11,18 @@ Follows https://tendermint.com/docs/networks/docker-compose.html#requirements
 
 ## Run
 
-To start 7 tendermint validator nodes
+Assuming 3 servers, and 5 clients:
+
+To DKG:
 
 ```
-./tools/docker/start-tendermint-local-testnet.sh 7
+./tools/docker/start-tendermint-local-testnet.sh 3 5 kg
+```
+
+The keys and logs can then be found in `~/eddsatendermint/`.
+
+Then simply run
+
+```
+./tools/docker/start-tendermint-local-testnet.sh 3 5 sign
 ```

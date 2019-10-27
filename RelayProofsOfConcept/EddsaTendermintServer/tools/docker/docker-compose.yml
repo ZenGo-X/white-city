@@ -94,70 +94,70 @@ services:
       localnet:
         ipv4_address: 192.167.10.4
 
-  kg0:
-    container_name: kg0
+  sign0:
+    container_name: sign0
     image: "white-city.eddsatendermint"
     depends_on:
         - node0
         - node1
         - node2
-    command: bash -c "./wait-for-it.sh 192.167.10.2:26657 -- ./kg-client -I 1 -C 5 --proxy 192.167.10.2:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    command: bash -c "cp /eddsatendermint/data/keys* ./ && ./wait-for-it.sh 192.167.10.4:26657 -- ./sign-client -I 1 -C 5 -M "message" --proxy 192.167.10.4:26657 && cp ./signature* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
     volumes:
       - ~/eddsatendermint:/eddsatendermint/data
     networks:
       localnet:
         ipv4_address: 192.167.11.2
 
-  kg1:
-    container_name: kg1
+  sign1:
+    container_name: sign1
     image: "white-city.eddsatendermint"
     depends_on:
         - node0
         - node1
         - node2
-    command: bash -c "./wait-for-it.sh 192.167.10.3:26657 -- ./kg-client -I 2 -C 5 --proxy 192.167.10.3:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    command: bash -c "cp /eddsatendermint/data/keys* ./ && ./wait-for-it.sh 192.167.10.2:26657 -- ./sign-client -I 2 -C 5 -M "message" --proxy 192.167.10.2:26657 && cp ./signature* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
     volumes:
       - ~/eddsatendermint:/eddsatendermint/data
     networks:
       localnet:
         ipv4_address: 192.167.11.3
 
-  kg2:
-    container_name: kg2
+  sign2:
+    container_name: sign2
     image: "white-city.eddsatendermint"
     depends_on:
         - node0
         - node1
         - node2
-    command: bash -c "./wait-for-it.sh 192.167.10.2:26657 -- ./kg-client -I 3 -C 5 --proxy 192.167.10.2:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    command: bash -c "cp /eddsatendermint/data/keys* ./ && ./wait-for-it.sh 192.167.10.3:26657 -- ./sign-client -I 3 -C 5 -M "message" --proxy 192.167.10.3:26657 && cp ./signature* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
     volumes:
       - ~/eddsatendermint:/eddsatendermint/data
     networks:
       localnet:
         ipv4_address: 192.167.11.4
 
-  kg3:
-    container_name: kg3
+  sign3:
+    container_name: sign3
     image: "white-city.eddsatendermint"
     depends_on:
         - node0
         - node1
         - node2
-    command: bash -c "./wait-for-it.sh 192.167.10.4:26657 -- ./kg-client -I 4 -C 5 --proxy 192.167.10.4:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    command: bash -c "cp /eddsatendermint/data/keys* ./ && ./wait-for-it.sh 192.167.10.4:26657 -- ./sign-client -I 4 -C 5 -M "message" --proxy 192.167.10.4:26657 && cp ./signature* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
     volumes:
       - ~/eddsatendermint:/eddsatendermint/data
     networks:
       localnet:
         ipv4_address: 192.167.11.5
 
-  kg4:
-    container_name: kg4
+  sign4:
+    container_name: sign4
     image: "white-city.eddsatendermint"
     depends_on:
         - node0
         - node1
         - node2
-    command: bash -c "./wait-for-it.sh 192.167.10.3:26657 -- ./kg-client -I 5 -C 5 --proxy 192.167.10.3:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    command: bash -c "cp /eddsatendermint/data/keys* ./ && ./wait-for-it.sh 192.167.10.2:26657 -- ./sign-client -I 5 -C 5 -M "message" --proxy 192.167.10.2:26657 && cp ./signature* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
     volumes:
       - ~/eddsatendermint:/eddsatendermint/data
     networks:

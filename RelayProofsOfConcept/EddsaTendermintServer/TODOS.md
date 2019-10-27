@@ -1,6 +1,0 @@
-# TODOs
-
-+ tendermint docker
-    * https://tendermint.com/docs/networks/docker-compose.html
-- ~~tweak "wait-for-it.sh"~~
-- ~~use default 127.0.0.1 for scalability~~
