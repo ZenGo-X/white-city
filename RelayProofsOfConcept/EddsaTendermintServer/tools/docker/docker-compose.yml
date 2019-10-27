@@ -1,13 +1,33 @@
 version: '3'
 
 services:
+  app0:
+    container_name: app0
+    image: "white-city.eddsatendermint"
+    command: ["/server", "--address", "192.167.9.2:26658"]
+    ports:
+      - "36656:26658"
+    networks:
+      localnet:
+        ipv4_address: 192.167.9.2
+
+  app1:
+    container_name: app1
+    image: "white-city.eddsatendermint"
+    command: ["/server", "--address", "192.167.9.3:26658"]
+    ports:
+      - "36657:26658"
+    networks:
+      localnet:
+        ipv4_address: 192.167.9.3
+
   node0:
     container_name: node0
     image: "tendermint/localnode"
     depends_on:
         - app0
         - app1
-    command: ["node", "--proxy_app", "tcp://192.167.11.2:26658", "kvstore"]
+    command: ["node", "--proxy_app", "tcp://192.167.9.2:26658", "kvstore"]
     ports:
       - "26656-26657:26656-26657"
     environment:
@@ -25,7 +45,7 @@ services:
     depends_on:
         - app0
         - app1
-    command: ["node", "--proxy_app", "tcp://192.167.11.3:26658", "kvstore"]
+    command: ["node", "--proxy_app", "tcp://192.167.9.3:26658", "kvstore"]
     ports:
       - "26658-26659:26656-26657"
     environment:
@@ -36,26 +56,6 @@ services:
     networks:
       localnet:
         ipv4_address: 192.167.10.3
-
-  app0:
-    container_name: app0
-    image: "white-city.eddsatendermint"
-    command: ["/server", "--address", "192.167.11.2:26658"]
-    ports:
-      - "36656:26658"
-    networks:
-      localnet:
-        ipv4_address: 192.167.11.2
-
-  app1:
-    container_name: app1
-    image: "white-city.eddsatendermint"
-    command: ["/server", "--address", "192.167.11.3:26658"]
-    ports:
-      - "36657:26658"
-    networks:
-      localnet:
-        ipv4_address: 192.167.11.3
 
 networks:
   localnet:
