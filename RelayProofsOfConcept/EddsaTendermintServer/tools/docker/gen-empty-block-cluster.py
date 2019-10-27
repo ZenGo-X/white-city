@@ -70,7 +70,7 @@ def print_kg(i, c, n):
     depends_on:"""
     for x in range(n):
         print """        - node"""+str(x)+""""""
-    print """    command: bash -c "./wait-for-it.sh 192.167.10."""+str(assigned_to+2)+""":26657 -- ./kg-client -I """+ str(i) +""" -C """+str(c)+""" --proxy 192.167.10."""+str(assigned_to+2)+""":26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    print """    command: bash -c "./wait-for-it.sh 192.167.10."""+str(assigned_to+2)+""":26657 -- ./kg-client -I """+ str(i+1) +""" -C """+str(c)+""" --proxy 192.167.10."""+str(assigned_to+2)+""":26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
     volumes:
       - ~/eddsatendermint:/eddsatendermint/data
     networks:

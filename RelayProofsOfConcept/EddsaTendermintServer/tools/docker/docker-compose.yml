@@ -13,11 +13,37 @@ services:
       localnet:
         ipv4_address: 192.167.9.2
 
+  app1:
+    container_name: app1
+    image: "white-city.eddsatendermint"
+    command: bash -c "./server --address 192.167.9.3:26658"
+    ports:
+      - "36657:26658"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
+    networks:
+      localnet:
+        ipv4_address: 192.167.9.3
+
+  app2:
+    container_name: app2
+    image: "white-city.eddsatendermint"
+    command: bash -c "./server --address 192.167.9.4:26658"
+    ports:
+      - "36658:26658"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
+    networks:
+      localnet:
+        ipv4_address: 192.167.9.4
+
   node0:
     container_name: node0
     image: "tendermint/localnode"
     depends_on:
         - app0
+        - app1
+        - app2
     command: ["node", "--proxy_app", "tcp://192.167.9.2:26658", "kvstore"]
     ports:
       - "26656-26657:26656-26657"
@@ -30,17 +56,113 @@ services:
       localnet:
         ipv4_address: 192.167.10.2
 
+  node1:
+    container_name: node1
+    image: "tendermint/localnode"
+    depends_on:
+        - app0
+        - app1
+        - app2
+    command: ["node", "--proxy_app", "tcp://192.167.9.3:26658", "kvstore"]
+    ports:
+      - "26658-26659:26656-26657"
+    environment:
+      - ID=1
+      - LOG=${LOG:-tendermint.log}
+    volumes:
+      - ./build:/tendermint:Z
+    networks:
+      localnet:
+        ipv4_address: 192.167.10.3
+
+  node2:
+    container_name: node2
+    image: "tendermint/localnode"
+    depends_on:
+        - app0
+        - app1
+        - app2
+    command: ["node", "--proxy_app", "tcp://192.167.9.4:26658", "kvstore"]
+    ports:
+      - "26660-26661:26656-26657"
+    environment:
+      - ID=2
+      - LOG=${LOG:-tendermint.log}
+    volumes:
+      - ./build:/tendermint:Z
+    networks:
+      localnet:
+        ipv4_address: 192.167.10.4
+
   kg0:
     container_name: kg0
     image: "white-city.eddsatendermint"
     depends_on:
         - node0
-    command: bash -c "./wait-for-it.sh 192.167.10.2:26657 -- ./kg-client -I 0 -C 1 --proxy 192.167.10.2:26657 && cp ./key* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+        - node1
+        - node2
+    command: bash -c "./wait-for-it.sh 192.167.10.2:26657 -- ./kg-client -I 1 -C 5 --proxy 192.167.10.2:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
     volumes:
       - ~/eddsatendermint:/eddsatendermint/data
     networks:
       localnet:
         ipv4_address: 192.167.11.2
+
+  kg1:
+    container_name: kg1
+    image: "white-city.eddsatendermint"
+    depends_on:
+        - node0
+        - node1
+        - node2
+    command: bash -c "./wait-for-it.sh 192.167.10.3:26657 -- ./kg-client -I 2 -C 5 --proxy 192.167.10.3:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
+    networks:
+      localnet:
+        ipv4_address: 192.167.11.3
+
+  kg2:
+    container_name: kg2
+    image: "white-city.eddsatendermint"
+    depends_on:
+        - node0
+        - node1
+        - node2
+    command: bash -c "./wait-for-it.sh 192.167.10.2:26657 -- ./kg-client -I 3 -C 5 --proxy 192.167.10.2:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
+    networks:
+      localnet:
+        ipv4_address: 192.167.11.4
+
+  kg3:
+    container_name: kg3
+    image: "white-city.eddsatendermint"
+    depends_on:
+        - node0
+        - node1
+        - node2
+    command: bash -c "./wait-for-it.sh 192.167.10.4:26657 -- ./kg-client -I 4 -C 5 --proxy 192.167.10.4:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
+    networks:
+      localnet:
+        ipv4_address: 192.167.11.5
+
+  kg4:
+    container_name: kg4
+    image: "white-city.eddsatendermint"
+    depends_on:
+        - node0
+        - node1
+        - node2
+    command: bash -c "./wait-for-it.sh 192.167.10.3:26657 -- ./kg-client -I 5 -C 5 --proxy 192.167.10.3:26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
+    networks:
+      localnet:
+        ipv4_address: 192.167.11.6
 
 networks:
   localnet:
