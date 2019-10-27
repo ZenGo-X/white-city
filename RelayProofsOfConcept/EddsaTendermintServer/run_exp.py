@@ -40,7 +40,7 @@ def main():
 
     def run_exps(exp_type, nodes, parties):
         max_vec = list()
-        for i in range(3):
+        for i in range(1):
             exp_filename = "./exp-{}-{}.csv".format(exp_type, parties)
             try:
                 os.remove(exp_filename)
@@ -56,26 +56,26 @@ def main():
             subprocess.call(["sh", tool, str(nodes), str(parties)])
             sleep_time = 20
             if exp_type is "kg":
-                sleep_time = max(int(parties/2), 20)
+                sleep_time = max(int(int(parties)/2), 20)
             elif exp_type is "sign":
-                sleep_time = max(int(parties * 1.5), 20)
+                sleep_time = max(int(int(parties) * 1.5), 20)
             time.sleep(sleep_time)
             write_filename = "./full-exp-{}-{}.csv".format(exp_type, nodes)
             val = int(get_max_run_time(parties, exp_filename))
             if val != 0:
-                max_vec.append()
+                max_vec.append(val)
         avg = int(sum(max_vec) / len(max_vec))
         write_result(parties, write_filename, avg)
 
     args = get_args()
     #nodes_range = [4, 2, 1]
-    nodes_range = [6]
+    nodes_range = [10]
     #parties_range = [8, 4]
-    parties_range = range(150, 0, -10)
+    parties_range = range(60, 0, -10)
     if args.nodes:
         nodes_range = [args.nodes]
     if args.parties:
-        parties_range = [args.parteis]
+        parties_range = [args.parties]
     for nodes in nodes_range:
         for parties in parties_range:
             run_exps("kg", nodes, parties)

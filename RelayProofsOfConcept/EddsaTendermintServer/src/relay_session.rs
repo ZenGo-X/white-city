@@ -77,7 +77,7 @@ impl RelaySession {
         let number_of_active_peers = self.get_number_of_active_peers();
 
         let protocol_descriptor = ProtocolDescriptor::new(protocol_id, capacity);
-        info!("-----------------PEERS: {:?}---------------", self.peers);
+        debug!("-----------------PEERS: {:?}---------------", self.peers);
         if self.can_register(_addr, protocol_descriptor) {
             let mut peer = Peer::new(addr);
             peer.registered = true;

@@ -20,6 +20,6 @@ do
     PORT=$(( 46057 + $S * 100 ))
     #PORT="46157"
     # cargo run -p mmpc-client --bin kg-client -- -I $i -C $n --proxy 127.0.0.1:$PORT -v &
-    #./target/debug/kg-client -I $i -C $n --proxy 127.0.0.1:$PORT &> log-error$i.log &
-    ./target/debug/kg-client -I $i -C $k --proxy 127.0.0.1:$PORT &
+    ./target/debug/kg-client -I $i -C $k --proxy 127.0.0.1:$PORT &> log-error$i.log &
+    #./target/debug/kg-client -I $i -C $k --proxy 127.0.0.1:$PORT &
 done

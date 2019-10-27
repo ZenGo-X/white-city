@@ -16,6 +16,6 @@ clean-all: clean clean-exp
 
 kill:
 	pgrep tendermint | xargs kill -KILL
-	pgrep kg | xargs kill -KILL
 	pgrep sign | xargs kill -KILL
+	pgrep kg | xargs kill -KILL
 
