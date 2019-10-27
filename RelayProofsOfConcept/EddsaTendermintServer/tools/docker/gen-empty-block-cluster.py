@@ -29,9 +29,11 @@ def print_app(i, n):
     print """  app"""+str(i)+""":
     container_name: app"""+str(i)+"""
     image: "white-city.eddsatendermint"
-    command: ["/server", "--address", "192.167.9."""+str(2+i)+""":26658"]
+    command: bash -c "./server --address 192.167.9."""+str(2+i)+""":26658"
     ports:
       - \""""+str(36656+i)+""":26658"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
     networks:
       localnet:
         ipv4_address: 192.167.9."""+str(2+i)+"""
@@ -68,7 +70,9 @@ def print_kg(i, c, n):
     depends_on:"""
     for x in range(n):
         print """        - node"""+str(x)+""""""
-    print """    command: ["/wait-for-it.sh", "192.167.10."""+str(assigned_to+2)+""":26657", "--", "/kg-client", "-I", \""""+ str(i) +"""\", "-C", \""""+str(c)+"""\", "--proxy", "192.167.10."""+str(assigned_to+2)+""":26657"]
+    print """    command: bash -c "./wait-for-it.sh 192.167.10."""+str(assigned_to+2)+""":26657 -- ./kg-client -I """+ str(i) +""" -C """+str(c)+""" --proxy 192.167.10."""+str(assigned_to+2)+""":26657 && cp ./keys* /eddsatendermint/data/ && cp ./*.log /eddsatendermint/data/"
+    volumes:
+      - ~/eddsatendermint:/eddsatendermint/data
     networks:
       localnet:
         ipv4_address: 192.167.11."""+str(2+i)+"""
