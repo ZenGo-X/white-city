@@ -12,4 +12,4 @@ Cargo.lock
 .idea
 .DS_Store
 
-tools/docker/docker-compose.yml
+**/tools/docker/docker-compose.yml
