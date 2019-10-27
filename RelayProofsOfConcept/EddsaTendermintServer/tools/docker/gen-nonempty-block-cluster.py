@@ -22,11 +22,14 @@ def print_tailer():
 """
 
 
-def print_node(i):
+def print_node(i, n):
     print """  node"""+str(i)+""":
     container_name: node"""+str(i)+"""
     image: "tendermint/localnode"
-    command: ["node", "--proxy_app", "tcp://192.167.11."""+str(2+i)+""":26658", "kvstore"]
+    depends_on:"""
+    for x in range(n):
+        print """        - app"""+str(x)+""""""
+    print """    command: ["node", "--proxy_app", "tcp://192.167.11."""+str(2+i)+""":26658", "kvstore", "--consensus.create_empty_blocks=false"]
     ports:
       - \""""+str(26656+2*i)+"""-"""+str(26657+2*i)+""":26656-26657"
     environment:
@@ -43,11 +46,8 @@ def print_node(i):
 def print_app(i, n):
     print """  app"""+str(i)+""":
     container_name: app"""+str(i)+"""
-    image: "eddsatendermintserver_server"
-    depends_on:"""
-    for x in range(n):
-        print """        - node"""+str(x)+""""""
-    print """    command: ["/target/release/server", "--address", "192.167.11."""+str(2+i)+""":26658"]
+    image: "white-city.eddsatendermint"
+    command: ["/server", "--address", "192.167.11."""+str(2+i)+""":26658"]
     ports:
       - \""""+str(36656+i)+""":26658"
     networks:
@@ -59,7 +59,7 @@ def print_app(i, n):
 def main():
     print_header()
     for i in range(node_num):
-        print_node(i)
+        print_node(i, node_num)
     for i in range(node_num):
         print_app(i, node_num)
     print_tailer()        

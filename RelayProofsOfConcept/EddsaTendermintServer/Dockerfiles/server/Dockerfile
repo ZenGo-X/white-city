@@ -1,9 +1,0 @@
-FROM ubuntu:latest
-
-WORKDIR /
-
-COPY ./ /
-
-# VOLUME [ / ]
-EXPOSE 26658
-STOPSIGNAL SIGTERM

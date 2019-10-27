@@ -33,11 +33,11 @@ services:
 
   app0:
     container_name: app0
-    image: "eddsatendermintserver_server"
+    image: "white-city.eddsatendermint"
     depends_on:
         - node0
         - node1
-    command: ["/target/release/server", "--address", "192.167.11.2:26658"]
+    command: ["/server", "--address", "192.167.11.2:26658"]
     ports:
       - "36656:26658"
     networks:
@@ -46,11 +46,11 @@ services:
 
   app1:
     container_name: app1
-    image: "eddsatendermintserver_server"
+    image: "white-city.eddsatendermint"
     depends_on:
         - node0
         - node1
-    command: ["/target/release/server", "--address", "192.167.11.3:26658"]
+    command: ["/server", "--address", "192.167.11.3:26658"]
     ports:
       - "36657:26658"
     networks:

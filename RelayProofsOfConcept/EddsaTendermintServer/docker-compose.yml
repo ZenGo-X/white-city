@@ -1,7 +1,8 @@
 version: '3'
 
 services:
-  server:
+  white-city.eddsatendermint:
+    image: white-city.eddsatendermint:latest
     build:
       context: .
-      dockerfile: Dockerfiles/server/Dockerfile
+      dockerfile: Dockerfiles/white-city/Dockerfile
