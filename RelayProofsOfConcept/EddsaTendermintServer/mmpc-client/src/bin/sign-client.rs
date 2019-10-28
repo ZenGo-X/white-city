@@ -1,18 +1,27 @@
+use std::error::Error;
 use std::fs;
-/// Implementation of a client that communicates with the relay server
-/// This client represents eddsa peer
+use std::fs::OpenOptions;
 use std::io;
 use std::net::SocketAddr;
+use std::path::Path;
+use std::process;
 use std::{thread, time};
 
 use clap::{App, Arg, ArgMatches};
 use log::debug;
+use serde::Serialize;
 
 use mmpc_client::eddsa_peer_sign::EddsaPeer;
 use mmpc_client::peer::Peer;
 use mmpc_client::tendermint_client::SessionClient;
 
 use multi_party_eddsa::protocols::aggsig::{KeyAgg, KeyPair};
+
+#[derive(Debug, Serialize)]
+struct Record {
+    index: u32,
+    millis: u32,
+}
 
 const MAX_RETRY: u32 = 512;
 const RETRY_TIMEOUT: u64 = 200;
@@ -155,6 +164,7 @@ fn main() {
 
     // Port and ip address are used as a unique indetifier to the server
     // This should be replaced with PKi down the road
+    let start_time = time::SystemTime::now();
     let port = 8080 + client_index;
     let proxy_addr = format!("tcp://{}", proxy);
     let client_addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
@@ -200,4 +210,46 @@ fn main() {
             }
         }
     }
+
+    let total_time = start_time.elapsed().expect("Weird time");
+    println!("{:}", total_time.as_millis());
+
+    if let Err(err) = write_to_csv(client_index, total_time.as_millis() as u32, capacity) {
+        println!("error running example: {}", err);
+        process::exit(1);
+    }
+}
+
+fn write_to_csv(index: u32, millis: u32, capacity: u32) -> Result<(), Box<dyn Error>> {
+    let filename = format!("exp-sign-{}.csv", capacity);
+    if Path::new(&filename).exists() {
+        let file = OpenOptions::new().append(true).open(&filename)?;
+
+        let mut wtr = csv::WriterBuilder::default()
+            .has_headers(false)
+            .from_writer(file);
+
+        wtr.serialize(Record {
+            index: index,
+            millis: millis,
+        })?;
+        wtr.flush()?;
+    } else {
+        let file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&filename)?;
+
+        let mut wtr = csv::WriterBuilder::default()
+            .has_headers(true)
+            .from_writer(file);
+
+        wtr.serialize(Record {
+            index: index,
+            millis: millis,
+        })?;
+        wtr.flush()?;
+    }
+
+    Ok(())
 }
