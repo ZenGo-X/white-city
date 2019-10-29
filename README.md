@@ -26,6 +26,7 @@ Here is a list of contributors to White City (not ordered):
 - Frederic Peschanski
 - Omer Shlomovits 
 - Roman Zeyde
+- Haoyu LIN
 
 
 ### Want to Contribute:
