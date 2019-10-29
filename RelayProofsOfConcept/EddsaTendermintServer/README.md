@@ -34,4 +34,3 @@ Then run the signing similarly to key generation, for example:
 In the demo 5 clients create a threshold signature. A cluster of 4 nodes runs the protocol, after node 3 fails, the protocol still completes successfully.
 ![demo](./demo/tendermint-demo.gif)
 
-At technical report is avaialble ![White-City](./White-City-Report/white_city.pdf)
