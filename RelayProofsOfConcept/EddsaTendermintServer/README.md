@@ -2,7 +2,6 @@
 
 This is a POC for running distributed multi-party signatures with Tendermint consensus as a backend for message broadcast
 
-
 ## Build instructions:
 Build server and clients:  
 `cargo build --all`
