@@ -2,14 +2,21 @@
 
 This is a POC for running distributed multi-party signatures with Tendermint consensus as a backend for message broadcast
 
-# Prerequisites:
-* Tendermint: Follow the installation guide for your system at [tendermint github](https://github.com/tendermint/tendermint)  
+## Build instructions:
+Build server and clients:  
+`cargo build --all`
+
+## Instructions: Tendermint cluster
+Instructions to run a full demo of distributed key generation and n-of-n signing  
+
+### Prerequisites:
+* `Tendermint`: Follow the installation guide for your system at [tendermint github](https://github.com/tendermint/tendermint)  
 * `tmux`  
 * `python`  
 
-## Instructions: Tendermint cluster
+### Instructions:
 The script `generate.py` takes the number of nodes as a parameter, and generates scripts to run a cluster of Tendermint nodes
-The shell scripts are created in a `./tools` directory
+The shell scripts are created in a `./tools` directory. 4 Nodes is the default.
 
 1. run `./tools/local-cluster-init.sh` to create a node Testnet configuration
 2. run `./tools/local-cluster-start.sh` to start the Tendermint nodes, along with the application servers in separate `tmux` sessions

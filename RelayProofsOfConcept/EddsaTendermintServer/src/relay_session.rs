@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
-use mmpc_server_common::common::{NOT_A_PEER, STATE_NOT_INITIALIZED};
 use mmpc_server_common::{ClientMessage, StoredMessages};
 use mmpc_server_common::{PeerIdentifier, ProtocolIdentifier, RelayMessage};
 
@@ -167,7 +166,7 @@ impl RelaySession {
 
     /// Check if this relay message sent from the given SocketAddr
     /// and is valid to send to rest of the peers
-    pub fn can_relay(&self, from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
+    pub fn can_relay(&self, _from: &SocketAddr, msg: &RelayMessage) -> Result<(), &'static str> {
         debug!("Checking if {:} can relay", msg.peer_number);
         debug!("Server state: {:?}", self.state());
         debug!("Turn of peer #: {:}", self.protocol().next());
@@ -175,17 +174,6 @@ impl RelaySession {
         // TODO: Add some checks of what messages can be stored
 
         return Ok(());
-    }
-
-    /// get a copy of Peer that addr represents
-    fn get_peer_by_address(&self, addr: &SocketAddr) -> Option<Peer> {
-        match self.peers.read().unwrap().get(addr) {
-            Some(p) => match p.registered {
-                true => Some(p.clone()),
-                false => None,
-            },
-            None => None,
-        }
     }
 
     // Return the current state of the relay session
@@ -204,11 +192,6 @@ impl RelaySession {
 
     pub fn set_protocol(&self, protocol: ProtocolDescriptor) {
         *self.protocol.write().unwrap() = protocol;
-    }
-
-    pub fn increase_step(&self) {
-        *self.round.write().unwrap() += 1;
-        // Change the the number of messages to received back to 0
     }
 
     pub fn round(&self) -> u32 {
