@@ -2,7 +2,7 @@
 API to integrate distributed network for secure computation protocols. 
 
 Read more details in our technical report:  
-[White-City](./White-City-Report/white_city.pdf)
+[White-City](./White-City-Report/whitecity_new.pdf)
 
 ### Background
 Secure Multiparty Computation (MPC) has transitioned from a thoretical field to applied technology with real life use cases. In MPC a set of n parties are running a distributed computation over private inputs. To do so, MPC protocols designers make assumptions on the required network and communication channels. A complete p2p network setup might turn out to be costly, effectively eliminating the practicallity of running MPC at scale. 
