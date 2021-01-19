@@ -33,4 +33,4 @@ Here is a list of contributors to White City (not ordered):
 
 
 ### Want to Contribute:
-Please send an email to github@kzencorp.com containing your github username. We will get in touch and bring you up to speed. We try to keep the list of issues relevant so it might also be a good place to start. Join the ZenGo X [Telegram](https://t.me/zengo_x) for discussions on code and research.
+Please send an email to github@kzencorp.com containing your github username. We will get in touch and bring you up to speed. We try to keep the list of issues relevant so it might also be a good place to start. Join the ZenGo X [Telegram](https://t.me/joinchat/ET1mddGXRoyCxZ-7) for discussions on code and research.
